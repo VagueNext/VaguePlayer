@@ -1,0 +1,96 @@
+package com.vagueplayer.music.service
+
+import android.content.Intent
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
+import com.google.common.util.concurrent.ListenableFuture // Fix Unresolved reference
+
+class PlaybackService : MediaSessionService() {
+
+    private var mediaSession: MediaSession? = null
+    private lateinit var player: ExoPlayer
+
+    override fun onCreate() {
+        super.onCreate()
+        
+        // Initialize ExoPlayer
+        player = ExoPlayer.Builder(this)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(C.USAGE_MEDIA)
+                    .build(),
+                false // handleAudioFocus: Default FALSE to allow mixing (Concurrent Playback)
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+        
+        // User Request: "Default to Playlist Loop"
+        player.repeatMode = Player.REPEAT_MODE_ALL
+
+        // Create MediaSession
+        mediaSession = MediaSession.Builder(this, player)
+            .setCallback(SessionCallback())
+            .build()
+    }
+    
+    private inner class SessionCallback : MediaSession.Callback {
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session).build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: androidx.media3.session.SessionCommand,
+            args: android.os.Bundle
+        ): ListenableFuture<androidx.media3.session.SessionResult> {
+            if (customCommand.customAction == "SET_MIX_AUDIO") {
+                val isMixEnabled = args.getBoolean("enabled", true)
+                // If Mix is ALLOWED (true), then handleAudioFocus must be FALSE (Don't fight for focus).
+                // If Mix is DISABLED (false), then handleAudioFocus must be TRUE (Exclusive mode).
+                val handleFocus = !isMixEnabled
+                
+                player.setAudioAttributes(player.audioAttributes, handleFocus)
+                
+                return com.google.common.util.concurrent.Futures.immediateFuture(
+                    androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS)
+                )
+            }
+            if (customCommand.customAction == "SET_GAPLESS") {
+                val isGapless = args.getBoolean("enabled", false)
+                player.skipSilenceEnabled = isGapless
+                
+                 return com.google.common.util.concurrent.Futures.immediateFuture(
+                    androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS)
+                )
+            }
+            return super.onCustomCommand(session, controller, customCommand, args)
+        }
+    }
+    
+    // The service lifecycle is managed by MediaSessionService
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        return mediaSession
+    }
+
+    override fun onDestroy() {
+        mediaSession?.run {
+            player.release()
+            release()
+            mediaSession = null
+        }
+        super.onDestroy()
+    }
+    
+    // Starting in Android 12 (API 31), we can't start foreground services from background
+    // effortlessly, but MediaSessionService handles simple cases.
+    // For more complex notification handling, we'll rely on Media3's default notification provider first.
+}
