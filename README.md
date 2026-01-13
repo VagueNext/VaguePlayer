@@ -3,7 +3,7 @@
 > 探索 **液态玻璃拟态 (Liquid Glassmorphism)** 与 **流体交互** 的极致美学。
 
 Vague Player 是一款基于 **Jetpack Compose** 构建的现代 Android 本地音乐播放器。它不仅仅是一个播放工具，更是一次对 Android 平台 UI/UX 极限的探索，旨在带来如水般流畅、如玻璃般晶莹的视觉与交互体验。
-https://t.me/+pEfTc1-Ag_k1MjZk
+https://t.me/+pEfTc1-Ag_k1MjZk[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ---
 ![Screenshot_2026-01-14-01-19-22-78_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/53ff2ac3-5fd5-415f-92f6-2335a8d5ef1a)
 ![Screenshot_2026-01-14-01-19-27-27_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/24601690-7146-478f-a3b8-dc54c9db7345)
@@ -85,6 +85,7 @@ Vague Player 的诞生离不开开源社区的灵感与支持。特别感谢：
 > *"Design is not just what it looks like and feels like. Design is how it works."*
 
 © 2026 Yun. All Rights Reserved.
+
 
 
 
