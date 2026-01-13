@@ -5,6 +5,14 @@
 Vague Player 是一款基于 **Jetpack Compose** 构建的现代 Android 本地音乐播放器。它不仅仅是一个播放工具，更是一次对 Android 平台 UI/UX 极限的探索，旨在带来如水般流畅、如玻璃般晶莹的视觉与交互体验。
 
 ---
+![Screenshot_2026-01-14-01-19-22-78_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/53ff2ac3-5fd5-415f-92f6-2335a8d5ef1a)
+![Screenshot_2026-01-14-01-19-27-27_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/24601690-7146-478f-a3b8-dc54c9db7345)
+![Screenshot_2026-01-14-01-19-34-14_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/7407582c-f270-4c2b-9a5a-eaeff2d9b1a5)
+![Screenshot_2026-01-14-01-19-37-96_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/24385946-3f7d-499e-974c-2cf0399b6d36)
+![Screenshot_2026-01-14-01-19-40-67_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/117b0ecc-d082-4317-bcc6-36bb2fb83363)
+![Screenshot_2026-01-14-01-19-43-59_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/8dd2f98b-0d79-4f71-b6bd-46201b3c055c)
+![Screenshot_2026-01-14-01-19-53-39_e933402d58a33eaed6f62c5bc07ef7b4](https://github.com/user-attachments/assets/3d0a0c0f-4bcd-4e1c-8a04-3f188385d990)
+![Uploading Screenshot_2026-01-14-01-19-11-64_e933402d58a33eaed6f62c5bc07ef7b4.jpg…]()
 
 ## ✨ 核心特性 (Key Features)
 
@@ -77,3 +85,4 @@ Vague Player 的诞生离不开开源社区的灵感与支持。特别感谢：
 > *"Design is not just what it looks like and feels like. Design is how it works."*
 
 © 2026 Yun. All Rights Reserved.
+
