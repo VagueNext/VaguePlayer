@@ -26,7 +26,8 @@ import dev.chrisbanes.haze.HazeState
 @Composable
 fun PlaylistActionMenu(
     isExpanded: Boolean,
-    anchorSize: androidx.compose.ui.unit.DpSize? = null,
+    anchorSize: androidx.compose.ui.unit.DpSize, // Made required
+    anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
     onAddPlaylist: () -> Unit,
     onImportPlaylist: () -> Unit,
     onExportPlaylist: () -> Unit,
@@ -36,8 +37,10 @@ fun PlaylistActionMenu(
     MorphingGlassMenu(
         isExpanded = isExpanded,
         anchorSize = anchorSize,
+        anchorPosition = anchorPosition, // Forwarded
         onDismiss = onDismiss,
-        hazeState = hazeState
+        hazeState = hazeState,
+        expandUp = false // Default
     ) {
         // Content
         Column(

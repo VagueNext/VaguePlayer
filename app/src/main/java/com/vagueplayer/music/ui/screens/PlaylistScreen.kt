@@ -32,6 +32,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.positionInRoot // [FIX] Added missing import
 
 import dev.chrisbanes.haze.HazeState
 import com.vagueplayer.music.ui.components.GlassDialog
@@ -54,6 +55,7 @@ import android.widget.Toast
 @Composable
 fun PlaylistScreen(
     onCreatePlaylist: () -> Unit,
+    onShowAddMenu: (androidx.compose.ui.geometry.Offset) -> Unit, // [NEW] Hoisted Menu
     hazeState: HazeState? = null
 ) {
     val context = LocalContext.current
@@ -65,9 +67,13 @@ fun PlaylistScreen(
     var showDetailDialog by remember { mutableStateOf(false) }
     var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
     
-    var showMenu by remember { mutableStateOf(false) }
+
+    
+    // showMenu REMOVED - Hoisted to MainScreen
     var isExportMode by remember { mutableStateOf(false) }
     var playlistToExportId by remember { mutableStateOf<String?>(null) } // Changed to String
+
+    // addButtonPosition REMOVED - Passed via Callback
 
 
 
@@ -104,13 +110,6 @@ fun PlaylistScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null
-                ) { 
-                    // Click outside to dismiss menu
-                    if (showMenu) showMenu = false 
-                }
         ) {
             Column {
                 // Header
@@ -118,7 +117,14 @@ fun PlaylistScreen(
                     title = if (isExportMode) "选择导出歌单" else "歌单",
                     action = {
                         Box {
-                            IconButton(onClick = { showMenu = true }) {
+
+                            var localBtnPos by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+                            IconButton(
+                                onClick = { onShowAddMenu(localBtnPos) },
+                                modifier = Modifier.onGloballyPositioned { 
+                                    localBtnPos = it.boundsInWindow().topLeft
+                                }
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
                                     contentDescription = "Add",
@@ -127,28 +133,7 @@ fun PlaylistScreen(
                                 )
                             }
                             
-                            // Action Menu Overlay - Using Morphing Glass Menu
-                            if (showMenu) {
-                                PlaylistActionMenu(
-                                    isExpanded = true,
-                                    anchorSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp),
-                                    onAddPlaylist = {
-                                        showMenu = false
-                                        onCreatePlaylist()
-                                    },
-                                    onImportPlaylist = {
-                                        showMenu = false
-                                        importLauncher.launch(arrayOf("text/plain"))
-                                    },
-                                    onExportPlaylist = {
-                                        showMenu = false
-                                        isExportMode = true
-                                        Toast.makeText(context, "请点击下方歌单进行导出", Toast.LENGTH_SHORT).show()
-                                    },
-                                    onDismiss = { showMenu = false },
-                                    hazeState = hazeState
-                                )
-                            }
+                            
                         }
                     }
                 )
@@ -244,7 +229,7 @@ fun PlaylistScreen(
                     .fillMaxWidth()
                     .height(600.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    // .waterDropGlass removed from parent
+                    .clip(RoundedCornerShape(24.dp))
             ) {
                 // 1. Background (Glass)
                 Box(
@@ -324,7 +309,10 @@ fun PlaylistScreen(
                     }
                 }
             }
-            } // End Root Box
+                // OVERLAY LAYER - Playlist Action Menu (Hoisted)
+                // OVERLAY LAYER - Playlist Action Menu (Hoisted)
+         // REMOVED local PlaylistActionMenu call
+    } // End Root Box
 }
         
         // Add Song Picker (Nested)

@@ -100,6 +100,7 @@ fun PlayerScreen(
     viewModel: AudioViewModel,
     onDismiss: () -> Unit,
     onTogglePlaylist: () -> Unit,
+    onShowRepeatMenu: (androidx.compose.ui.geometry.Offset) -> Unit, // [NEW] Hoisted
     hazeState: HazeState? = null
 ) {
     val isPlaying by viewModel.isPlaying.collectAsState()
@@ -109,7 +110,7 @@ fun PlayerScreen(
 
     // Lyrics State (Internal)
     var isLyricsVisible by remember { mutableStateOf(false) }
-    var showRepeatMenu by remember { mutableStateOf(false) }
+    // showRepeatMenu REMOVED
     var showLoopCountDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) } // [NEW] Sleep Timer State
     
@@ -117,8 +118,11 @@ fun PlayerScreen(
     // Lifted state for access in Overlay
     val repeatMode by viewModel.repeatMode.collectAsState()
     
+    // [FIX] Capture Repeat Button Position (Hoisted for Overlay)
+    var repeatButtonPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    
     // Bounds for Morphing Menus
-    // Bounds logic removed
+
 
 
 
@@ -172,54 +176,9 @@ fun PlayerScreen(
                 val pos = it.positionInRoot()
                 if (pos.getDistance() > 0) rootPosition = pos
             } // [NEW] Capture Global Root Pos Only if Valid
-            .pointerInput(Unit) {
-                var accumulation = androidx.compose.ui.geometry.Offset.Zero
-                var triggered = false
 
-                detectDragGestures(
-                    onDragStart = { 
-                        accumulation = androidx.compose.ui.geometry.Offset.Zero 
-                        triggered = false
-                    },
-                    onDragEnd = { triggered = false },
-                    onDragCancel = { triggered = false },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        accumulation += dragAmount
-                        
-                        if (!triggered) {
-                            val absX = kotlin.math.abs(accumulation.x)
-                            val absY = kotlin.math.abs(accumulation.y)
-                            
-                            // 1. Vertical Swipe (Dismiss / Lyrics) - Priority: Must be clearly vertical
-                            if (absY > absX * 1.5f) { // Steep angle required
-                                if (accumulation.y > 80) { // Swipe Down -> Dismiss (Easier)
-                                    onDismiss()
-                                    triggered = true
-                                } else if (accumulation.y < -50) { // Swipe Up -> Lyrics (Very Easy)
-                                    isLyricsVisible = true
-                                    triggered = true
-                                }
-                            }
-                            // 2. Horizontal Swipe (Prev / Next)
-                            else if (absX > absY * 1.5f) { // Shallow angle required
-                                if (accumulation.x > 100) { // Swipe Right -> Previous
-                                    viewModel.skipPrevious()
-                                    triggered = true
-                                } else if (accumulation.x < -100) { // Swipe Left -> Next
-                                    viewModel.skipNext()
-                                    triggered = true
-                                }
-                            }
-                        }
-                    }
-                )
-            }
-            // .haze(state = finalHazeState) // [REMOVED] Root must NOT be Source if it contains Sink
+
     ) {
-        // SOURCE CONTENT WRAPPER: Captures Background + Tracks
-        // This Box contains the elements to be blurred/refracted.
-        // It does NOT contain the Sinks (GlassThumb, Dialogs), avoiding recursion.
         // [NEW] Haze Source Box: Wraps Background + Track
         // This Box contains the elements to be blurred/refracted.
         // It does NOT contain the Sinks (GlassThumb, Dialogs), avoiding recursion.
@@ -229,21 +188,62 @@ fun PlayerScreen(
                  .haze(state = finalHazeState) 
         ) {
             Box(
-                 modifier = Modifier.fillMaxSize()
-            ) {
-             // A. Background (Pure White)\n             Box(modifier = Modifier.fillMaxSize().background(Color.White))
-            
+                 modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        var accumulation = androidx.compose.ui.geometry.Offset.Zero
+                        var triggered = false
+
+                        detectDragGestures(
+                            onDragStart = { 
+                                accumulation = androidx.compose.ui.geometry.Offset.Zero 
+                                triggered = false
+                            },
+                            onDragEnd = { triggered = false },
+                            onDragCancel = { triggered = false },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                accumulation += dragAmount
+                            
+                            if (!triggered) {
+                                val absX = kotlin.math.abs(accumulation.x)
+                                val absY = kotlin.math.abs(accumulation.y)
+                                
+                                // 1. Vertical Swipe (Dismiss / Lyrics)
+                                if (absY > absX * 1.5f) { 
+                                    if (accumulation.y > 80) { 
+                                        onDismiss()
+                                        triggered = true
+                                    } else if (accumulation.y < -50) { 
+                                        isLyricsVisible = true
+                                        triggered = true
+                                    }
+                                }
+                                // 2. Horizontal Swipe (Prev / Next)
+                                else if (absX > absY * 1.5f) { 
+                                    if (accumulation.x > 100) { 
+                                        viewModel.skipPrevious()
+                                        triggered = true
+                                    } else if (accumulation.x < -100) { 
+                                        viewModel.skipNext()
+                                        triggered = true
+                                    }
+                                }
+                        }
+                        }
+                    )
+                }) {
+             
              // B. Album Art Overlay (Blurred)
              AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(currentSong?.albumArtUri)
-                    .crossfade(true)
                     .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(100.dp) 
+                    .blur(40.dp) // [FIX] Reduced blur for better "see-through" effect 
             )
             // Lighter Overlay
             Box(
@@ -261,7 +261,9 @@ fun PlayerScreen(
                 .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // A. Top Grab Handle [REMOVED]
+
+            
+            // B. Large Album Art
             Spacer(modifier = Modifier.weight(1f))
             
             // B. Large Album Art
@@ -320,7 +322,6 @@ fun PlayerScreen(
                             modifier = Modifier.size(28.dp)
                         ) 
                     }
-                    // [REMOVED] MoreHoriz Icon
                 }
             }
             
@@ -465,15 +466,16 @@ fun PlayerScreen(
                      val remainingLoopCount by viewModel.remainingLoopCount.collectAsState()
                      val targetLoopCount by viewModel.targetLoopCount.collectAsState()
                      
+                       var localRepeatPos by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
                        Box(
                            modifier = Modifier
                                .size(50.dp)
                                .onGloballyPositioned { 
-
+                                   localRepeatPos = it.positionInRoot()
                                }
                                .bouncyClickable(
                                    onClick = { viewModel.cyclePlayMode() },
-                                   onLongClick = { showRepeatMenu = true }
+                                   onLongClick = { onShowRepeatMenu(localRepeatPos) }
                                )
                                .padding(8.dp),
                            contentAlignment = Alignment.Center
@@ -524,29 +526,7 @@ fun PlayerScreen(
                              }
                         }
 
-                        // Anchored Menu inside the Button Box
-                        if (showRepeatMenu) {
-                            com.vagueplayer.music.ui.components.RepeatModeMenu(
-                                isExpanded = true,
-                                onDismiss = { showRepeatMenu = false },
-                                anchorSize = androidx.compose.ui.unit.DpSize(50.dp, 50.dp),
-                                currentMode = repeatMode,
-                                onModeSelected = { mode -> 
-                                    if (mode == 3) {
-                                         viewModel.setShuffleMode(true)
-                                    } else {
-                                         viewModel.toggleRepeatMode(mode)
-                                         if (mode != Player.REPEAT_MODE_OFF) viewModel.setShuffleMode(false) 
-                                    }
-                                    showRepeatMenu = false 
-                                },
-                                onSetCount = { 
-                                    showRepeatMenu = false
-                                    showLoopCountDialog = true
-                                },
-                                hazeState = finalHazeState
-                            )
-                        }
+
                      }
                 
                 // 2. CENTER: Sleep Timer Button (Weight 1f)
@@ -602,8 +582,9 @@ fun PlayerScreen(
             }
         } // END SOURCE WRAPPER
         
-        // 3. Repeat Menu Overlay
-        // Uses MorphingGlassMenu internally
+        // 3. Repeat Menu Overlay (Hoisted)
+        // 3. Repeat Menu Overlay (Hoisted)
+        // REMOVED local RepeatModeMenu call
 
 
         // 6. PORTAL SINK LAYER: Glass Thumb Overlay

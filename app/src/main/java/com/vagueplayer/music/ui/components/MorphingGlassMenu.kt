@@ -6,95 +6,102 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import dev.chrisbanes.haze.HazeState
 import kotlin.math.roundToInt
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
+
 import androidx.compose.ui.platform.LocalConfiguration
 
 @Composable
 fun MorphingGlassMenu(
     isExpanded: Boolean,
     onDismiss: () -> Unit,
-    anchorSize: DpSize? = null, // Width/Height of the anchor button
-    expandUp: Boolean = false, // Direction (default Down)
+    anchorSize: DpSize, // Made required/non-nullable for clarity
+    anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
+    expandUp: Boolean = false, 
     hazeState: HazeState? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    if (!isExpanded) return
-
-    // Constraint: Popup must be offset to avoid clipping for negative coordinates (expandUp)
-    // We calculate the animation values first, then pass the current offset to the Popup.
-
-    // 0. Capture Global Position of Anchor (Internal)
-    var parentCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    Layout(content = {}, modifier = Modifier.onGloballyPositioned { parentCoordinates = it }) { _, _ -> layout(0,0){} }
-
     // 1. Animation State
+    // We drive the transition with the external isExpanded state directly
     var targetSize by remember { mutableStateOf(Size.Zero) }
-    var isMenuVisible by remember { mutableStateOf(false) }
 
-    LaunchedEffect(targetSize) {
-        if (targetSize.width > 0) isMenuVisible = true
+    // Decouple visibility from size to ensure animation starts immediately
+    val isVisible = isExpanded
+    
+    val transition = updateTransition(targetState = isVisible, label = "MenuMorph")
+
+    // Opacity for the Whole Menu (Moved up for Exit Logic)
+    val menuAlpha by transition.animateFloat(
+        transitionSpec = { tween(durationMillis = 350) }, 
+        label = "MenuAlpha"
+    ) { open -> if (open) 1f else 0f }
+
+    // Exit Logic: Keep rendering until Alpha is effectively zero
+    if (!isExpanded && menuAlpha < 0.02f) {
+        return
     }
 
-    val transition = updateTransition(targetState = isMenuVisible, label = "MenuMorph")
-
+    // [FIX] Force a refresh of the glass effect shortly after opening
+    var refreshTrigger by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
+            kotlinx.coroutines.delay(50) 
+            refreshTrigger = 1f 
+        }
+    }
+    
     // 2. Geometry & Spring Logic
     val density = LocalDensity.current
-    val startWidth = with(density) { anchorSize?.width?.toPx() ?: 0f }
-    val startHeight = with(density) { anchorSize?.height?.toPx() ?: 0f }
+    val startWidth = with(density) { anchorSize.width.toPx() }
+    val startHeight = with(density) { anchorSize.height.toPx() }
 
     val configuration = LocalConfiguration.current
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
     
     // Target X Logic:
-    // 1. Calculate relative center: (AnchorW - MenuW) / 2
-    val relativeCenterX = (startWidth - targetSize.width) / 2f
+    val anchorCenterX = anchorPosition.x + (startWidth / 2f)
+    val menuTargetLeft = anchorCenterX - (targetSize.width / 2f)
     
-    // 2. Convert to Global -> Clamp -> Convert back
-    val anchorGlobalX = parentCoordinates?.positionInWindow()?.x ?: 0f
-    val globalTargetX = anchorGlobalX + relativeCenterX
-    
-    // 3. Screen Edge Gap: 6dp
+    // 2. Clamp
     val screenGap = with(density) { 6.dp.toPx() }
-    val clampedGlobalX = globalTargetX.coerceIn(
+    val clampedLeft = menuTargetLeft.coerceIn(
         screenGap, 
         screenWidthPx - targetSize.width - screenGap
     )
     
-    // 4. Final Relative Target X
-    val targetX = if (parentCoordinates != null) {
-        clampedGlobalX - anchorGlobalX
-    } else {
-        relativeCenterX // Fallback if layout not ready
-    }
+    // 3. Final X
+    val targetX = clampedLeft
     
-    // Target Y: Up or Down with Gap
-    val gap = with(density) { 6.dp.toPx() } // [GAP UPDATED to 6dp]
+    // Target Y
+    val gap = with(density) { 6.dp.toPx() }
     val targetY = if (expandUp) {
-            -targetSize.height - gap
+            anchorPosition.y - targetSize.height - gap
     } else {
-            startHeight + gap
+            anchorPosition.y + startHeight + gap
     }
 
     // Spring Config
     val popSpring = spring<Float>(dampingRatio = 0.75f, stiffness = 350f)
 
     // Animated Values
+    // When closing (transition.targetState == false && transition.currentState == true),
+    // we want to stay at the "Target" (Expanded) values and just fade out (alpha -> 0).
+    // So we use (open || transition.currentState) to check if we are in Open or Closing state.
+    
     val offsetX by transition.animateFloat(transitionSpec = { popSpring }, label = "X") { open ->
-        if (open) targetX else 0f
+        if (open) targetX else anchorPosition.x 
     }
     val offsetY by transition.animateFloat(transitionSpec = { popSpring }, label = "Y") { open ->
-        if (open) targetY else 0f
+        if (open) targetY else anchorPosition.y 
     }
     val width by transition.animateFloat(transitionSpec = { popSpring }, label = "Width") { open ->
         if (open) targetSize.width else startWidth
@@ -110,19 +117,37 @@ fun MorphingGlassMenu(
         if (open) endRadius else startRadius
     }
     
-    // Opacity
+    // Content Opacity (Internal elements) - Optional delay for niceness
     val contentAlpha by transition.animateFloat(
-        transitionSpec = { tween(durationMillis = 200, delayMillis = 100) }, 
+        transitionSpec = { tween(durationMillis = 200, delayMillis = 50) }, 
         label = "Content"
     ) { open -> if (open) 1f else 0f }
 
-    // 3. Render Popup
-    // Key Fix: Apply offset to the Popup itself so the Window moves to the draw area (preventing clipping)
-    Popup(
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true, excludeFromSystemGesture = true),
-        offset = IntOffset(offsetX.roundToInt(), offsetY.roundToInt())
+    // 3. Render Overlay (No Popup)
+    // [FIX] Using Box Overlay instead of Popup to ensure shared Window for Haze Transparency
+    
+    // Full-screen overlay for outside clicks
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(1000f) // Try to float on top if possible (only works if siblings)
+            .offset { IntOffset(0, 0) } // Reset any parent offset? No, fillMaxSize takes parent bounds.
     ) {
+        // Scrim (Handle dismiss)
+        // Only clickable if open? Yes.
+        if (isVisible) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDismiss
+                    )
+            )
+        }
+
+        // The Menu Itself
         Layout(
             content = {
                 Column(
@@ -133,14 +158,16 @@ fun MorphingGlassMenu(
                 )
             },
             modifier = Modifier
-                // Offset removed here (handled by Popup)
+                // Apply Global Offset
+                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                .graphicsLayer { alpha = menuAlpha } // [NEW] Fade In/Out Container
                 .waterDropGlass(
                     hazeState = hazeState,
                     cornerRadius = with(density) { cornerRadius.toDp() },
                     blurRadius = 40.dp,
                     edgeWidth = 8.0f,
                     distortionStrength = 8.0f,
-                    tint = Color.White.copy(alpha = 0.35f),
+                    tint = Color.White.copy(alpha = 0.15f),
                     enableShader = true
                 )
         ) { measurables, _ ->

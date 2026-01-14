@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha // [FIX] Added missing import for alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -70,19 +71,20 @@ fun UnifiedGlassDock(
                 targetValue = (48.dp * collapseProgress).coerceAtLeast(0.dp), 
                 label = "PlayerPadding"
             )
-            
-            // [NEW] Vertical Shift: Move down when collapsing
-            // Target 54dp = 38dp (Player Height) + 16dp (Spacer) to align centers
+
+            // [RESTORE] Vertical Shift: Move down when collapsing
             val playerOffsetY by animateDpAsState(
-                targetValue = (54.dp * collapseProgress), 
+                targetValue = (50.dp * collapseProgress), 
                 label = "PlayerOffsetY"
             )
+            // Alpha Animation REMOVED by user request
             
             // 1. Player Dock (Top Capsule) - Always Visible (User Request)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .offset(y = playerOffsetY) // [ANIMATION] Smooth Drop Down
+                    .offset(y = playerOffsetY) // [RESTORE] Smooth Drop Down
+                    // .alpha(playerAlpha) REMOVED
                     .padding(horizontal = playerPadding) // [ANIMATION] Shrink effect
                     .height(38.dp), // [RESIZE] Compact Player
                 contentAlignment = Alignment.Center

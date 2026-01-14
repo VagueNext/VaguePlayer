@@ -30,7 +30,8 @@ import dev.chrisbanes.haze.HazeState
 fun RepeatModeMenu(
     isExpanded: Boolean,
     onDismiss: () -> Unit,
-    anchorSize: androidx.compose.ui.unit.DpSize? = null,
+    anchorSize: androidx.compose.ui.unit.DpSize, // Made required
+    anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
     currentMode: Int,
     onModeSelected: (Int) -> Unit,
     onSetCount: () -> Unit,
@@ -40,6 +41,7 @@ fun RepeatModeMenu(
         isExpanded = isExpanded,
         onDismiss = onDismiss,
         anchorSize = anchorSize,
+        anchorPosition = anchorPosition, // Forwarded
         expandUp = true,
         hazeState = hazeState
     ) {

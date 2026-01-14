@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.positionInRoot // [FIX] Added missing import
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -44,13 +45,17 @@ import com.vagueplayer.music.ui.components.waterDropGlass
 import dev.chrisbanes.haze.HazeState
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch // [FIX] Required for scrolling
-import androidx.compose.foundation.layout.heightIn // Required for sidebar height constraint
+import androidx.compose.ui.geometry.Offset // [FIX] Added missing import
 
 @OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
-    hazeState: HazeState? = null
+    hazeState: HazeState? = null,
+    onShowSortOptions: (Offset) -> Unit // [NEW] Hoisted Callback
 ) {
+    // [FIX] Define Local State for Button Position
+    var sortButtonPosition by remember { mutableStateOf(Offset.Zero) }
+
     val context = LocalContext.current
     val factory = AudioViewModelFactory(context)
     val viewModel: AudioViewModel = viewModel(factory = factory)
@@ -87,9 +92,6 @@ fun LibraryScreen(
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isScanning,
         onRefresh = { 
-            // Smart Refresh Logic:
-            // 1. If no custom folders are set, prompt to add one.
-            // 2. Otherwise, refresh library.
             if (customFolders.isEmpty()) {
                 launcher.launch(null)
             } else {
@@ -97,10 +99,6 @@ fun LibraryScreen(
             }
         }
     )
-
-    val showSort = viewModel.showSortDialog.collectAsState().value
-
-
 
     Box(
         modifier = Modifier
@@ -111,7 +109,6 @@ fun LibraryScreen(
         Box(
              modifier = Modifier
                  .fillMaxSize()
-//                  .blur(if (showSort) 20.dp else 0.dp) [REMOVED] User Request
         ) {
             Column(
                 modifier = Modifier
@@ -161,8 +158,8 @@ fun LibraryScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp) // ADDED padding
-                        .padding(top = 80.dp, bottom = 16.dp), // Match ScreenHeader padding
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 80.dp, bottom = 16.dp), // [RESTORE] Stable 80dp top padding
                     horizontalArrangement = Arrangement.SpaceBetween, // Title Left, Button Right
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -174,81 +171,25 @@ fun LibraryScreen(
                         color = Color.Black
                     )
 
-                    // Sort Button (Right)
-                    Box {
-                        IconButton(onClick = { viewModel.toggleSortDialog() }) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
-                                contentDescription = "Sort",
-                                tint = Color.Black // Dark text
-                            )
-                        }
-                        
-                        // Menu now handled by High Level Overlay
-                        if (showSort) {
-                            com.vagueplayer.music.ui.components.MorphingGlassMenu(
-                                isExpanded = true,
-                                onDismiss = { viewModel.toggleSortDialog() },
-                                anchorSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp),
-                                hazeState = null // Disable Haze to prevent crash
+                            // Sort Button (Right)
+                            IconButton(
+                                onClick = { 
+                                    onShowSortOptions(sortButtonPosition) // [NEW] Call hoisted state
+                                },
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    sortButtonPosition = coordinates.boundsInWindow().topLeft
+                                }
                             ) {
-                                 val currentSort = viewModel.sortOption.collectAsState().value
-                                 val options: List<Pair<String, com.vagueplayer.music.viewmodel.AudioViewModel.SortOption>> = listOf(
-                                     "标题" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.TITLE,
-                                     "艺术家" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.ARTIST,
-                                     "大小" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.SIZE,
-                                     "播放次数" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.PLAY_COUNT,
-                                     "时长 (短→长)" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DURATION_ASC,
-                                     "时长 (长→短)" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DURATION_DESC,
-                                     "添加时间" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DATE_ADDED
-                                 )
-                                 
-                                 options.forEach { (label, option) ->
-                                     Row(
-                                          modifier = Modifier
-                                              .fillMaxWidth()
-                                              .clickable { 
-                                                  viewModel.setSortOption(option)
-                                                  viewModel.toggleSortDialog()
-                                              }
-                                              .padding(vertical = 8.dp, horizontal = 20.dp), 
-                                          horizontalArrangement = Arrangement.SpaceBetween,
-                                          verticalAlignment = Alignment.CenterVertically
-                                     ) {
-                                         Text(
-                                             text = label, 
-                                             color = if(currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Black, 
-                                             fontSize = 15.sp, 
-                                             fontWeight = FontWeight.Medium
-                                         )
-                                         
-                                         // [REVISED] Radio Button Style Indicator
-                                         Box(
-                                             modifier = Modifier
-                                                 .size(20.dp)
-                                                 .border(
-                                                     width = 2.dp, 
-                                                     color = if (currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Gray.copy(alpha = 0.5f), 
-                                                     shape = androidx.compose.foundation.shape.CircleShape
-                                                 ),
-                                             contentAlignment = Alignment.Center
-                                         ) {
-                                             if (currentSort == option) {
-                                                 Box(
-                                                     modifier = Modifier
-                                                         .size(10.dp)
-                                                         .background(com.vagueplayer.music.ui.theme.AccentBlue, androidx.compose.foundation.shape.CircleShape)
-                                                 )
-                                             }
-                                         }
-                                     }
-                                 }
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
+                                    contentDescription = "Sort",
+                                    tint = Color.Black 
+                                )
                             }
-                        }
-                    }
-                }
-            }
 
+
+                            } 
+                }
 
             // Song List
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -258,7 +199,9 @@ fun LibraryScreen(
             val isSidebarLeft = viewModel.isSidebarOnLeft.collectAsState().value
             val sidebarSections = remember { (listOf('#') + ('A'..'Z')).toList() }
             
-            Box(modifier = Modifier.fillMaxSize()) {
+            
+            
+            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(
@@ -422,22 +365,21 @@ fun LibraryScreen(
                     )
                 }
             } // Close Inner Box (List + Sidebar)
+            } // Close Column
         }
-    } // Close Outer Box (PullRefresh)
     
     // OVERLAY LAYER - Real Glass Dropdown (Custom Implementation)
-    // OVERLAY LAYER - Morphing Glass Menu
-    
-    // OVERLAY LAYER - Dialog Removed (Replaced by Dropdown)
+    // OVERLAY LAYER - Morphing Glass Menu (Hoisted)
 
-    // OVERLAY LAYER - Dialog Removed (Replaced by Dropdown)
+
+
 
     PullRefreshIndicator(
         refreshing = isScanning,
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter),
-            backgroundColor = Color.White,
-            contentColor = com.vagueplayer.music.ui.theme.AccentBlue
-        )
+        state = pullRefreshState,
+        modifier = Modifier.align(Alignment.TopCenter),
+        backgroundColor = Color.White,
+        contentColor = com.vagueplayer.music.ui.theme.AccentBlue
+    )
     }
 }

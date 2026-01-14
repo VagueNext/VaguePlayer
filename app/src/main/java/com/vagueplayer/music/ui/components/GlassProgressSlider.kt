@@ -271,7 +271,7 @@ fun GlassThumb(
                 hazeState = if (isGlassEnabled) hazeState else null, 
                 // Match Player Controls White (Milky Glass)
                 blurRadius = 0.dp,
-                tint = if (isGlassEnabled) Color.White.copy(alpha = 0.01f) else Color.White, // [USER-REQUEST] 1% White 
+                tint = if (isGlassEnabled) Color.White.copy(alpha = 0.2f) else Color.White, // [FIX] Increased visibility (Frosted Glass) 
                 cornerRadius = height / 2,
                 // Use Passed Parameter (3.dp or calculated)
                 edgeWidth = if (isGlassEnabled) edgeWidth else 0f, 
