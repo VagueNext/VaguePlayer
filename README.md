@@ -1,6 +1,11 @@
-# Vague Player (朦胧音乐)
+# Vague Player ( 朦胧音乐 )
 
+探索兔子玻璃拟态 (Liquid Glassmorphism) 与流体交互的极限美学。
 
+Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音乐播放器。它不仅仅是一个播放工具，更是一次对 Android 平台 UI/UX 极限的探索。
+
+[![Telegram](https://img.shields.io/badge/Telegram-Join-blue?logo=telegram)](https://t.me/+pEfTc1-Ag_k1MjZk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
