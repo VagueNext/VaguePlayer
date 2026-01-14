@@ -30,6 +30,8 @@ import com.vagueplayer.music.viewmodel.AudioViewModel
 import com.vagueplayer.music.viewmodel.AudioViewModelFactory
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 
 import dev.chrisbanes.haze.HazeState
 import com.vagueplayer.music.ui.components.GlassDialog
@@ -66,6 +68,8 @@ fun PlaylistScreen(
     var showMenu by remember { mutableStateOf(false) }
     var isExportMode by remember { mutableStateOf(false) }
     var playlistToExportId by remember { mutableStateOf<String?>(null) } // Changed to String
+
+
 
     // Management States
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -123,32 +127,27 @@ fun PlaylistScreen(
                                 )
                             }
                             
-                            // Action Menu Overlay
+                            // Action Menu Overlay - Using Morphing Glass Menu
                             if (showMenu) {
-                                androidx.compose.ui.window.Popup(
-                                    alignment = Alignment.TopEnd,
-                                    onDismissRequest = { showMenu = false },
-                                    offset = androidx.compose.ui.unit.IntOffset(0, with(androidx.compose.ui.platform.LocalDensity.current) { 50.dp.roundToPx() })
-                                ) {
-                                    PlaylistActionMenu(
-                                        onAddPlaylist = {
-                                            showMenu = false
-                                            onCreatePlaylist()
-                                        },
-                                        onImportPlaylist = {
-                                            showMenu = false
-                                            importLauncher.launch(arrayOf("text/plain"))
-                                        },
-                                        onExportPlaylist = {
-                                            showMenu = false
-                                            isExportMode = true
-                                            Toast.makeText(context, "请点击下方歌单进行导出", Toast.LENGTH_SHORT).show()
-                                        },
-                                        onDismiss = { showMenu = false },
-                                        hazeState = hazeState,
-                                        modifier = Modifier // No algin needed inside Popup
-                                    )
-                                }
+                                PlaylistActionMenu(
+                                    isExpanded = true,
+                                    anchorSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp),
+                                    onAddPlaylist = {
+                                        showMenu = false
+                                        onCreatePlaylist()
+                                    },
+                                    onImportPlaylist = {
+                                        showMenu = false
+                                        importLauncher.launch(arrayOf("text/plain"))
+                                    },
+                                    onExportPlaylist = {
+                                        showMenu = false
+                                        isExportMode = true
+                                        Toast.makeText(context, "请点击下方歌单进行导出", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onDismiss = { showMenu = false },
+                                    hazeState = hazeState
+                                )
                             }
                         }
                     }

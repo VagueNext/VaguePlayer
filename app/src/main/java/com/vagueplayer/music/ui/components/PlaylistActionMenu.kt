@@ -25,35 +25,23 @@ import dev.chrisbanes.haze.HazeState
 
 @Composable
 fun PlaylistActionMenu(
+    isExpanded: Boolean,
+    anchorSize: androidx.compose.ui.unit.DpSize? = null,
     onAddPlaylist: () -> Unit,
     onImportPlaylist: () -> Unit,
     onExportPlaylist: () -> Unit,
     onDismiss: () -> Unit,
-    hazeState: HazeState? = null,
-    modifier: Modifier = Modifier
+    hazeState: HazeState? = null
 ) {
-    // Compact, "Capsule-like" glass menu
-    Box(
-        modifier = modifier
-            .width(160.dp) 
-            .clip(RoundedCornerShape(16.dp))
-            .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-            .clickable(enabled = false) {}, 
-        contentAlignment = Alignment.Center
+    MorphingGlassMenu(
+        isExpanded = isExpanded,
+        anchorSize = anchorSize,
+        onDismiss = onDismiss,
+        hazeState = hazeState
     ) {
-        // 1. Background (Glass)
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .waterDropGlass(
-                    hazeState = hazeState,
-                    cornerRadius = 16.dp
-                )
-        )
-
-        // 2. Content
+        // Content
         Column(
-            modifier = Modifier.padding(vertical = 8.dp, horizontal = 8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // 1. Add New

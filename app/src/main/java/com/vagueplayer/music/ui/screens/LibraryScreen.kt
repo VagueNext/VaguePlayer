@@ -15,7 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.PlaylistPlay // [NEW]
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay // [NEW]
 import androidx.compose.material3.SwipeToDismissBox // [NEW]
 import androidx.compose.material3.SwipeToDismissBoxValue // [NEW]
 import androidx.compose.material3.rememberSwipeToDismissBoxState // [NEW]
@@ -27,6 +27,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -97,6 +99,8 @@ fun LibraryScreen(
     )
 
     val showSort = viewModel.showSortDialog.collectAsState().value
+
+
 
     Box(
         modifier = Modifier
@@ -181,6 +185,66 @@ fun LibraryScreen(
                         }
                         
                         // Menu now handled by High Level Overlay
+                        if (showSort) {
+                            com.vagueplayer.music.ui.components.MorphingGlassMenu(
+                                isExpanded = true,
+                                onDismiss = { viewModel.toggleSortDialog() },
+                                anchorSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp),
+                                hazeState = null // Disable Haze to prevent crash
+                            ) {
+                                 val currentSort = viewModel.sortOption.collectAsState().value
+                                 val options: List<Pair<String, com.vagueplayer.music.viewmodel.AudioViewModel.SortOption>> = listOf(
+                                     "标题" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.TITLE,
+                                     "艺术家" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.ARTIST,
+                                     "大小" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.SIZE,
+                                     "播放次数" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.PLAY_COUNT,
+                                     "时长 (短→长)" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DURATION_ASC,
+                                     "时长 (长→短)" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DURATION_DESC,
+                                     "添加时间" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DATE_ADDED
+                                 )
+                                 
+                                 options.forEach { (label, option) ->
+                                     Row(
+                                          modifier = Modifier
+                                              .fillMaxWidth()
+                                              .clickable { 
+                                                  viewModel.setSortOption(option)
+                                                  viewModel.toggleSortDialog()
+                                              }
+                                              .padding(vertical = 8.dp, horizontal = 20.dp), 
+                                          horizontalArrangement = Arrangement.SpaceBetween,
+                                          verticalAlignment = Alignment.CenterVertically
+                                     ) {
+                                         Text(
+                                             text = label, 
+                                             color = if(currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Black, 
+                                             fontSize = 15.sp, 
+                                             fontWeight = FontWeight.Medium
+                                         )
+                                         
+                                         // [REVISED] Radio Button Style Indicator
+                                         Box(
+                                             modifier = Modifier
+                                                 .size(20.dp)
+                                                 .border(
+                                                     width = 2.dp, 
+                                                     color = if (currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Gray.copy(alpha = 0.5f), 
+                                                     shape = androidx.compose.foundation.shape.CircleShape
+                                                 ),
+                                             contentAlignment = Alignment.Center
+                                         ) {
+                                             if (currentSort == option) {
+                                                 Box(
+                                                     modifier = Modifier
+                                                         .size(10.dp)
+                                                         .background(com.vagueplayer.music.ui.theme.AccentBlue, androidx.compose.foundation.shape.CircleShape)
+                                                 )
+                                             }
+                                         }
+                                     }
+                                 }
+                            }
+                        }
                     }
                 }
             }
@@ -240,7 +304,7 @@ fun LibraryScreen(
                                 ) {
                                     if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
                                         Icon(
-                                            Icons.Default.PlaylistPlay, 
+                                            Icons.AutoMirrored.Filled.PlaylistPlay, 
                                             contentDescription = "Play Next", 
                                             tint = Color.White
                                         )
@@ -362,102 +426,9 @@ fun LibraryScreen(
     } // Close Outer Box (PullRefresh)
     
     // OVERLAY LAYER - Real Glass Dropdown (Custom Implementation)
-    if (showSort) {
-        // Scrim to dismiss
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null
-                ) { viewModel.toggleSortDialog() }
-        )
-        
-        // The Glass Menu
-        Box(
-            modifier = Modifier
-                .padding(top = 130.dp, end = 16.dp) // Positioned relative to Header
-                .align(Alignment.TopEnd)
-                .width(220.dp)
-                .width(220.dp)
-                // .waterDropGlass removed from parent
-        ) {
-            // 1. Background (Glass)
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .waterDropGlass(
-                        hazeState = null, // [FIX] Disable Haze to prevent Nested Sink Crash (Library is inside Source)
-                        cornerRadius = 28.dp,
-                        blurRadius = 40.dp, // Strong Blur
-                        edgeWidth = 10.0f, // Thick Glass Edge
-                        distortionStrength = 20.0f, // Liquid Refraction
-                        tint = Color.White.copy(alpha = 0.2f),
-                        enableShader = true // ENABLE SHADER for Refractive Menu
-                    )
-            )
-
-            // 2. Content
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp)
-            ) {
-                   val currentSort = viewModel.sortOption.collectAsState().value
-                   val options: List<Pair<String, com.vagueplayer.music.viewmodel.AudioViewModel.SortOption>> = listOf(
-                       "自定义" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.CUSTOM,
-                       "标题" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.TITLE,
-                       "艺术家" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.ARTIST,
-                       "大小" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.SIZE,
-                       "播放次数" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.PLAY_COUNT,
-                       "时长 (短→长)" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DURATION_ASC,
-                       "时长 (长→短)" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DURATION_DESC,
-                       "添加时间" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DATE_ADDED
-                   )
-                   
-                   options.forEach { (label, option) ->
-                       Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { 
-                                    viewModel.setSortOption(option)
-                                    viewModel.toggleSortDialog()
-                                }
-                                .padding(vertical = 8.dp, horizontal = 20.dp), 
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                       ) {
-                           Text(
-                               text = label, 
-                               color = if(currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Black, 
-                               fontSize = 15.sp, 
-                               fontWeight = FontWeight.Medium
-                           )
-                           
-                           // [REVISED] Radio Button Style Indicator
-                           Box(
-                               modifier = Modifier
-                                   .size(20.dp)
-                                   .border(
-                                       width = 2.dp, 
-                                       color = if (currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Gray.copy(alpha = 0.5f), 
-                                       shape = androidx.compose.foundation.shape.CircleShape
-                                   ),
-                               contentAlignment = Alignment.Center
-                           ) {
-                               if (currentSort == option) {
-                                   Box(
-                                       modifier = Modifier
-                                           .size(10.dp)
-                                           .background(com.vagueplayer.music.ui.theme.AccentBlue, androidx.compose.foundation.shape.CircleShape)
-                                   )
-                               }
-                           }
-                       }
-                   }
-            }
-        }
-    }
+    // OVERLAY LAYER - Morphing Glass Menu
+    
+    // OVERLAY LAYER - Dialog Removed (Replaced by Dropdown)
 
     // OVERLAY LAYER - Dialog Removed (Replaced by Dropdown)
 

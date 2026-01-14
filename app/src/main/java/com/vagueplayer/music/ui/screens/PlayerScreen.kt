@@ -84,6 +84,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 
 // Utility
 fun formatTime(ms: Long): String {
@@ -113,7 +114,13 @@ fun PlayerScreen(
     var showSleepTimerDialog by remember { mutableStateOf(false) } // [NEW] Sleep Timer State
     
     // Lifted state for access in Overlay
+    // Lifted state for access in Overlay
     val repeatMode by viewModel.repeatMode.collectAsState()
+    
+    // Bounds for Morphing Menus
+    // Bounds logic removed
+
+
 
 
     // Local HazeState (or Shared)
@@ -458,17 +465,19 @@ fun PlayerScreen(
                      val remainingLoopCount by viewModel.remainingLoopCount.collectAsState()
                      val targetLoopCount by viewModel.targetLoopCount.collectAsState()
                      
-                     Box(contentAlignment = Alignment.BottomStart) {
-                          Box(
-                             modifier = Modifier
-                                 .size(50.dp)
-                                 .bouncyClickable(
-                                     onClick = { viewModel.cyclePlayMode() },
-                                     onLongClick = { showRepeatMenu = true }
-                                 )
-                                 .padding(8.dp),
-                             contentAlignment = Alignment.Center
-                          ) {
+                       Box(
+                           modifier = Modifier
+                               .size(50.dp)
+                               .onGloballyPositioned { 
+
+                               }
+                               .bouncyClickable(
+                                   onClick = { viewModel.cyclePlayMode() },
+                                   onLongClick = { showRepeatMenu = true }
+                               )
+                               .padding(8.dp),
+                           contentAlignment = Alignment.Center
+                        ) {
                               val isLoopActive by remember(targetLoopCount) { derivedStateOf { targetLoopCount > 0 } }
                               val isShuffleEnabled by viewModel.isShuffleEnabled.collectAsState()                             
                               val icon = when {
@@ -513,9 +522,32 @@ fun PlayerScreen(
                                       }
                                   }
                              }
-                          }
+                        }
+
+                        // Anchored Menu inside the Button Box
+                        if (showRepeatMenu) {
+                            com.vagueplayer.music.ui.components.RepeatModeMenu(
+                                isExpanded = true,
+                                onDismiss = { showRepeatMenu = false },
+                                anchorSize = androidx.compose.ui.unit.DpSize(50.dp, 50.dp),
+                                currentMode = repeatMode,
+                                onModeSelected = { mode -> 
+                                    if (mode == 3) {
+                                         viewModel.setShuffleMode(true)
+                                    } else {
+                                         viewModel.toggleRepeatMode(mode)
+                                         if (mode != Player.REPEAT_MODE_OFF) viewModel.setShuffleMode(false) 
+                                    }
+                                    showRepeatMenu = false 
+                                },
+                                onSetCount = { 
+                                    showRepeatMenu = false
+                                    showLoopCountDialog = true
+                                },
+                                hazeState = finalHazeState
+                            )
+                        }
                      }
-                }
                 
                 // 2. CENTER: Sleep Timer Button (Weight 1f)
                 val sleepTimerRemaining by viewModel.sleepTimerRemaining.collectAsState()
@@ -571,38 +603,8 @@ fun PlayerScreen(
         } // END SOURCE WRAPPER
         
         // 3. Repeat Menu Overlay
-        // SIBLING TO SOURCE (No Recursion)
-        if (showRepeatMenu) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { showRepeatMenu = false },
-                contentAlignment = Alignment.BottomStart
-            ) {
-                com.vagueplayer.music.ui.components.RepeatModeMenu(
-                    currentMode = repeatMode,
-                    onModeSelected = { mode -> 
-                        if (mode == 3) {
-                             viewModel.setShuffleMode(true)
-                        } else {
-                             viewModel.toggleRepeatMode(mode)
-                             if (mode != Player.REPEAT_MODE_OFF) viewModel.setShuffleMode(false) 
-                        }
-                        showRepeatMenu = false 
-                    },
-                    onSetCount = { 
-                        showRepeatMenu = false
-                        showLoopCountDialog = true
-                    },
-                    onDismiss = { showRepeatMenu = false },
-                    hazeState = finalHazeState, // [RESTORED]
-                    modifier = Modifier.padding(start = 24.dp, bottom = 90.dp)
-                )
-            }
-        }
+        // Uses MorphingGlassMenu internally
+
 
         // 6. PORTAL SINK LAYER: Glass Thumb Overlay
         // This is now a SIBLING of the Source, ensuring proper Haze capture without recursion.

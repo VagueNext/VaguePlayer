@@ -28,36 +28,24 @@ import dev.chrisbanes.haze.HazeState
 
 @Composable
 fun RepeatModeMenu(
+    isExpanded: Boolean,
+    onDismiss: () -> Unit,
+    anchorSize: androidx.compose.ui.unit.DpSize? = null,
     currentMode: Int,
     onModeSelected: (Int) -> Unit,
     onSetCount: () -> Unit,
-    onDismiss: () -> Unit,
-    hazeState: HazeState? = null,
-    modifier: Modifier = Modifier
+    hazeState: HazeState? = null
 ) {
-    // Compact, "Capsule-like" glass menu
-    Box(
-        modifier = modifier
-            .width(115.dp) // "One knife cut" - Ultra tight width
-            .clip(RoundedCornerShape(16.dp))
-            .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-            // .waterDropGlass removed from parent
-            .clickable(enabled = false) {}, 
-        contentAlignment = Alignment.Center
+    MorphingGlassMenu(
+        isExpanded = isExpanded,
+        onDismiss = onDismiss,
+        anchorSize = anchorSize,
+        expandUp = true,
+        hazeState = hazeState
     ) {
-        // 1. Background (Glass)
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .waterDropGlass(
-                    hazeState = hazeState,
-                    cornerRadius = 16.dp
-                )
-        )
-
-        // 2. Content
+        // Content
         Column(
-            modifier = Modifier.padding(vertical = 8.dp, horizontal = 8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // 1. Shuffle
