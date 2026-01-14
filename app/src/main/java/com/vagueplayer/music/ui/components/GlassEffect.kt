@@ -135,7 +135,7 @@ object LiquidGlassDefaults {
     val BlurRadius = 0.dp 
     val EdgeWidth = 8.0f // [USER-REQUEST] 8.0
     val DistortionStrength = 6.0f // [USER-REQUEST] 6.0
-    val Tint = Color.White.copy(alpha = 0.20f) // [USER-REQUEST] 20% White
+    val Tint = Color.White.copy(alpha = 0.35f) // [USER-REQUEST] Added 15% to 20% = 35% White
     val CornerRadius = 32.dp
 }
 

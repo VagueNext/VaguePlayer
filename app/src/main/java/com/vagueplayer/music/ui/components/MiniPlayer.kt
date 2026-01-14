@@ -137,7 +137,7 @@ fun MiniPlayer(
                 // Album Art / Icon [RESIZE]
                 Box(
                     modifier = Modifier
-                        .padding(start = 1.dp) // [USER REQUEST] Shift right 1dp
+                        .padding(start = 3.dp) // [USER REQUEST] Shift right 2dp (Total 3dp)
                         .size(28.dp) // [RESIZE] User requested 28dp
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.LightGray)
@@ -177,15 +177,16 @@ fun MiniPlayer(
                 }
 
                 // Controls [RESIZE]
+                // Controls [REVISED] Transparent Style based on user feedback
                 IconButton(
                     onClick = { viewModel.togglePlayPause() },
-                    modifier = Modifier.size(32.dp) // [RESIZE] Compact button
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = "Play/Pause",
-                        tint = Color.Black.copy(alpha = 0.8f),
-                        modifier = Modifier.size(20.dp) // [RESIZE]
+                        tint = Color.Black, // Black transparent style
+                        modifier = Modifier.size(26.dp) 
                     )
                 }
                 

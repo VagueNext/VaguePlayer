@@ -1,0 +1,4 @@
+# Exclude PowerShell scripts from language statistics
+*.ps1 linguist-vendored
+*.bat linguist-vendored
+*.cmd linguist-vendored

@@ -3,6 +3,7 @@ package com.vagueplayer.music.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border // [FIX] Added missing import
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -422,7 +423,7 @@ fun LibraryScreen(
                                     viewModel.setSortOption(option)
                                     viewModel.toggleSortDialog()
                                 }
-                                .padding(vertical = 12.dp, horizontal = 20.dp), 
+                                .padding(vertical = 8.dp, horizontal = 20.dp), 
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                        ) {
@@ -432,13 +433,25 @@ fun LibraryScreen(
                                fontSize = 15.sp, 
                                fontWeight = FontWeight.Medium
                            )
-                           if (currentSort == option) {
-                               Icon(
-                                   androidx.compose.material.icons.Icons.Default.Check, 
-                                   null, 
-                                   tint = com.vagueplayer.music.ui.theme.AccentBlue,
-                                   modifier = Modifier.size(18.dp)
-                               )
+                           
+                           // [REVISED] Radio Button Style Indicator
+                           Box(
+                               modifier = Modifier
+                                   .size(20.dp)
+                                   .border(
+                                       width = 2.dp, 
+                                       color = if (currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Gray.copy(alpha = 0.5f), 
+                                       shape = androidx.compose.foundation.shape.CircleShape
+                                   ),
+                               contentAlignment = Alignment.Center
+                           ) {
+                               if (currentSort == option) {
+                                   Box(
+                                       modifier = Modifier
+                                           .size(10.dp)
+                                           .background(com.vagueplayer.music.ui.theme.AccentBlue, androidx.compose.foundation.shape.CircleShape)
+                                   )
+                               }
                            }
                        }
                    }
