@@ -31,6 +31,8 @@ import com.vagueplayer.music.data.model.Playlist
 import com.vagueplayer.music.viewmodel.AudioViewModel
 import com.vagueplayer.music.ui.components.GlassInputDialog
 import androidx.compose.material.icons.filled.Edit
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -77,17 +79,21 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                 // A. Cover Image
                 if (displaySong != null) {
                     AsyncImage(
-                        model = displaySong.albumArtUri,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(displaySong.albumArtUri)
+                            // ❌ Disable crossfade for shared element transition target
+                            .crossfade(false) 
+                            // 🔥 Reuse memory cache key from list screen
+                            .placeholderMemoryCacheKey("cover_${currentPlaylist.id}") 
+                            .build(),
                         contentDescription = null,
-                        contentScale = ContentScale.Crop, // Must match Source (Crop)
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
-                            // 🔥 CRITICAL FIX 1: Elevate Z-Index to prevent being covered by background during entering transition
                             .zIndex(10f) 
                             .sharedElement(
-                                state = rememberSharedContentState(key = "playlist_cover_${currentPlaylist.id}"),
+                                state = rememberSharedContentState(key = "cover_${currentPlaylist.id}"), // 🔥 Matched Key
                                 animatedVisibilityScope = animatedVisibilityScope,
-                                // 🔥 CRITICAL FIX 2: Force animated size measurement
                                 placeHolderSize = SharedTransitionScope.PlaceHolderSize.animatedSize,
                                 boundsTransform = { _, _ ->
                                     spring(dampingRatio = 0.8f, stiffness = 380f)

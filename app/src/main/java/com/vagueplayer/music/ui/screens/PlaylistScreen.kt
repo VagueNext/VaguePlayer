@@ -37,6 +37,7 @@ import com.vagueplayer.music.ui.theme.AccentBlue
 import com.vagueplayer.music.viewmodel.AudioViewModel
 import com.vagueplayer.music.viewmodel.AudioViewModelFactory
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
@@ -259,15 +260,19 @@ fun PlaylistCard(
 
             if (coverSong != null) {
                 AsyncImage(
-                    model = coverSong.albumArtUri,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(coverSong.albumArtUri)
+                        .crossfade(true)
+                        .memoryCacheKey("cover_${playlist.id}") // 🔥 Consistent Key
+                        .build(),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop, // [USER] Must be Crop
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .then(
                             if (sharedTransitionScope != null && animatedVisibilityScope != null) {
                                 with(sharedTransitionScope) {
                                     Modifier.sharedElement(
-                                        state = rememberSharedContentState(key = "playlist_cover_${playlist.id}"),
+                                        state = rememberSharedContentState(key = "cover_${playlist.id}"), // 🔥 Matched Key
                                         animatedVisibilityScope = animatedVisibilityScope
                                     )
                                 }
