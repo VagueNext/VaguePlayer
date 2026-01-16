@@ -821,12 +821,18 @@ fun MainScreen() {
                 renderInOverlay = true
             ) {
                 val animatedScope = this
+                
+                // Calculate cover URL immediately for seamless transition
+                val mostPlayed = audioViewModel.getMostPlayedSong(activePlaylist)
+                val coverUrl = mostPlayed?.albumArtUri?.toString() ?: activePlaylist.songs.firstOrNull()?.albumArtUri?.toString()
+                
                 PlaylistDetailScreen(
                     playlist = activePlaylist,
+                    coverUrl = coverUrl,
                     viewModel = audioViewModel,
                     onDismissRequest = { selectedPlaylist = null },
                     animatedVisibilityScope = animatedScope
-                ) // End Box Maint Content
+                ) 
             } // End AnimatedVisibility Wrapper
         } // End if (activePlaylist != null)
 

@@ -263,7 +263,7 @@ fun PlaylistCard(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(coverSong.albumArtUri)
                         .crossfade(true)
-                        .memoryCacheKey("cover_${playlist.id}") // 🔥 Consistent Key
+                        .memoryCacheKey(coverSong.albumArtUri?.toString()) // 🔥 Key matches Detail Screen URL
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
