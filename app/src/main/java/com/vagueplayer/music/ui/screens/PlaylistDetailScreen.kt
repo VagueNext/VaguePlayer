@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
@@ -27,12 +28,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.vagueplayer.music.data.model.Playlist
 import com.vagueplayer.music.viewmodel.AudioViewModel
 import com.vagueplayer.music.ui.components.GlassInputDialog
 import androidx.compose.material.icons.filled.Edit
-import coil.request.ImageRequest
-import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -55,44 +56,51 @@ fun SharedTransitionScope.PlaylistDetailScreen(
     // Dialog State
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
+    
+    val scrollState = rememberScrollState()
 
-    // 1. Root Surface: Full Screen, Opaque Background to prevent transparency glitches
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+    // 1. Root Box: Replaces Scaffold/Surface for absolute control.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // 2. Core Layout: Column + VerticalScroll (Instantly calculates header position)
+        // 2. Scrollable Content Layer
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()) 
+                .verticalScroll(scrollState)
         ) {
             
-            // === Top: Immersive Header Image Area ===
+            // [Layer 1] Top Header Placeholder
+            // This box reserves space for the image but the image is inside it (unlike user snippet suggestion implying outside, keeping it simple inside is robust)
+            // User snippet put Image INSIDE this box. I will follow that.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(380.dp) // Pro-level height
+                    .height(380.dp)
             ) {
                 val displaySong = coverSong ?: currentPlaylist.songs.firstOrNull()
-                
+                val coverUrl = displaySong?.albumArtUri?.toString() // Get URL for cache key
+
                 // A. Cover Image
-                if (displaySong != null) {
+                if (coverUrl != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(displaySong.albumArtUri)
-                            // ❌ Disable crossfade for shared element transition target
-                            .crossfade(false) 
-                            // 🔥 Reuse memory cache key from list screen
-                            .placeholderMemoryCacheKey("cover_${currentPlaylist.id}") 
+                            .data(coverUrl)
+                            // 🔥 CRITICAL FIX: Disable crossfade to prevent transparency flash
+                            .crossfade(false)
+                            // 🔥 CRITICAL FIX: Reuse memory cache to eliminate loading gap
+                            .placeholderMemoryCacheKey("cover_${currentPlaylist.id}")
                             .build(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
-                            .zIndex(10f) 
+                            // Elevate Z-Index to stay above background
+                            .zIndex(1f) 
                             .sharedElement(
-                                state = rememberSharedContentState(key = "cover_${currentPlaylist.id}"), // 🔥 Matched Key
+                                state = rememberSharedContentState(key = "cover_${currentPlaylist.id}"),
                                 animatedVisibilityScope = animatedVisibilityScope,
                                 placeHolderSize = SharedTransitionScope.PlaceHolderSize.animatedSize,
                                 boundsTransform = { _, _ ->
@@ -109,29 +117,30 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                     )
                 }
                 
-                // B. Gradient Overlay (Bottom-up black gradient for text)
+                // B. Gradient Overlay (Layer 2)
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(180.dp)
+                        .fillMaxSize()
+                        .zIndex(2f)
                         .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)),
+                                startY = 300f
                             )
                         )
                 )
 
-                // C. Title (Overlay on image)
+                // C. Title (Layer 3)
                 Text(
                     text = currentPlaylist.name,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.ExtraBold
+                    style = MaterialTheme.typography.headlineMedium.copy( // Changed to HeadlineMedium per user snippet
+                         fontWeight = FontWeight.ExtraBold
                     ),
                     color = Color.White,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+                        .padding(24.dp)
+                        .zIndex(3f)
                         .sharedElement(
                             state = rememberSharedContentState(key = "playlist_title_${currentPlaylist.id}"),
                             animatedVisibilityScope = animatedVisibilityScope,
@@ -142,32 +151,9 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                              showRenameDialog = true
                         }
                 )
-
-                // D. Close Button (Top-Left, Status Bar Padded)
-                IconButton(
-                    onClick = onDismissRequest,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .statusBarsPadding() // Only pad the button
-                        .padding(16.dp)
-                ) {
-                    // Semi-transparent circle background
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.Black.copy(alpha = 0.3f), 
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Back",
-                            tint = Color.White,
-                            modifier = Modifier.padding(4.dp)
-                        )
-                    }
-                }
             }
 
-            // === Bottom: Content Area ===
+            // [Layer 2] Bottom Content (Song List)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -191,67 +177,70 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Song List
+                // Real Song List Data
                 if (currentPlaylist.songs.isEmpty()) {
                     Text("暂无歌曲", color = Color.Gray, modifier = Modifier.padding(vertical = 24.dp))
                 } else {
-                    currentPlaylist.songs.forEachIndexed { index, song ->
-                        Row(
-                             modifier = Modifier
-                                 .fillMaxWidth()
-                                 .clickable { 
-                                     viewModel.playSong(song, currentPlaylist.songs, currentPlaylist.name) 
-                                 }
-                                 .padding(vertical = 12.dp),
-                             verticalAlignment = Alignment.CenterVertically
-                         ) {
-                             Text(
-                                 "${index + 1}", 
-                                 color = Color.Gray, 
-                                 modifier = Modifier.width(30.dp),
-                                 style = MaterialTheme.typography.bodyMedium
-                             )
-                             
-                             AsyncImage(
-                                 model = song.albumArtUri,
-                                 contentDescription = null,
-                                 contentScale = ContentScale.Crop,
-                                 modifier = Modifier
-                                     .size(50.dp)
-                                     .clip(RoundedCornerShape(8.dp))
-                                     .background(Color.LightGray)
-                             )
-                             
-                             Spacer(modifier = Modifier.width(16.dp))
-                             
-                             Column(modifier = Modifier.weight(1f)) {
+                     currentPlaylist.songs.forEachIndexed { index, song ->
+                         ListItem(
+                             headlineContent = { 
                                  Text(
                                      song.title, 
-                                     style = MaterialTheme.typography.bodyLarge,
-                                     fontWeight = FontWeight.Medium,
-                                     maxLines = 1,
+                                     maxLines = 1, 
                                      overflow = TextOverflow.Ellipsis
-                                 )
+                                 ) 
+                             },
+                             supportingContent = { 
                                  Text(
-                                     song.artist, 
-                                     style = MaterialTheme.typography.bodySmall, 
-                                     color = Color.Gray,
+                                     "${song.artist} - ${song.album}",
                                      maxLines = 1,
                                      overflow = TextOverflow.Ellipsis
                                  )
+                             },
+                             leadingContent = { 
+                                  Text(
+                                      "${index + 1}", 
+                                      color = Color.Gray,
+                                      style = MaterialTheme.typography.bodyMedium
+                                  ) 
+                             },
+                             modifier = Modifier.clickable { 
+                                 viewModel.playSong(song, currentPlaylist.songs, currentPlaylist.name)
                              }
-                        }
-                    }
+                         )
+                     }
                 }
                 
-                // Bottom Spacing for Navigation Bar + MiniPlayer
-                Spacer(modifier = Modifier.navigationBarsPadding())
-                Spacer(modifier = Modifier.height(100.dp))
+                // Bottom Spacing (System Bars + Extra)
+                Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 80.dp))
+            }
+        }
+        
+        // 3. Floating Back Button (Layer Top - Fixed)
+        IconButton(
+            onClick = onDismissRequest,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(8.dp)
+                .zIndex(100f) // Always on top
+        ) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.3f),
+                shape = CircleShape,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack, // Changed to ArrowBack per snippet
+                    contentDescription = "Back",
+                    tint = Color.White,
+                    modifier = Modifier.padding(8.dp)
+                )
             }
         }
     }
     
-    // Rename Dialog
+    // Dialogs
     if (showRenameDialog) {
         GlassInputDialog(
             hazeState = null,
