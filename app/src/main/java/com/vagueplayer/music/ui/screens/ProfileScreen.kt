@@ -18,13 +18,18 @@ import com.vagueplayer.music.ui.theme.AccentBlue
 
 import com.vagueplayer.music.ui.components.waterDropGlass
 import com.vagueplayer.music.ui.components.LiquidGlassDefaults
+import com.vagueplayer.music.ui.animation.transformSource // [NEW]
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 import dev.chrisbanes.haze.HazeState
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ProfileScreen(
     hazeState: HazeState? = null,
     onNavigateToSettings: () -> Unit = {},
-    onQuickAction: (String) -> Unit = {} // [NEW]
+    onQuickAction: (String) -> Unit = {},
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null
 ) {
     Column(
         modifier = Modifier
@@ -105,10 +110,41 @@ fun ProfileScreen(
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.LightGray.copy(alpha = 0.2f))
                 .clickable { onNavigateToSettings() } 
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp)
+                .then(
+                    if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                         Modifier.transformSource("settings_card", sharedTransitionScope, animatedVisibilityScope)
+                    } else Modifier
+                ),
             contentAlignment = Alignment.CenterStart
         ) {
-            Text("设置", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            // [NEW] Shared Element Source
+            val sharedMod = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                with(sharedTransitionScope) {
+                     Modifier.transformSource("settings_card", this, animatedVisibilityScope)
+                }
+            } else Modifier
+            
+            Box(modifier = Modifier.fillMaxSize().then(sharedMod)) // Apply to internal box to match shape?
+            // Actually usually transformSource goes on the SURFACE (the visible container).
+            // The outer Box has the background.
+            
+            Text(
+                "设置", 
+                fontSize = 18.sp, 
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.then(
+                    if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                        with(sharedTransitionScope) {
+                            Modifier.sharedElement(
+                                state = rememberSharedContentState(key = "settings_text"),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                                renderInOverlayDuringTransition = false
+                            )
+                        }
+                    } else Modifier
+                )
+            )
         }
     }
 }

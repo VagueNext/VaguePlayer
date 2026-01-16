@@ -41,7 +41,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.* // [FIX] Ensure setValue/getValue are available
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Pause
@@ -82,9 +82,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.zIndex
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 
 // Utility
 fun formatTime(ms: Long): String {
@@ -94,14 +98,17 @@ fun formatTime(ms: Long): String {
     return String.format("%d:%02d", minutes, seconds)
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun PlayerScreen(
     viewModel: AudioViewModel,
     onDismiss: () -> Unit,
     onTogglePlaylist: () -> Unit,
     onShowRepeatMenu: (androidx.compose.ui.geometry.Offset) -> Unit, // [NEW] Hoisted
-    hazeState: HazeState? = null
+    hazeState: HazeState? = null,
+    isOverlayVisible: Boolean = false, // [FIX] New Param to disable back handler
+    sharedTransitionScope: SharedTransitionScope? = null, // [NEW] Shared Element Scope
+    animatedVisibilityScope: AnimatedVisibilityScope? = null // [NEW] Visibility Scope
 ) {
     val isPlaying by viewModel.isPlaying.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
@@ -137,8 +144,11 @@ fun PlayerScreen(
     
     // 2. Slider Interaction State
     var isSliderInteracting by remember { mutableStateOf(false) }
-    var sliderPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    var rootPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) } // [NEW] Capture Root Pos
+    
+    // [NEW] Sync-Render State
+    var sliderPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) } // Root Coordinates
+    var sliderSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var containerPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) } // Root Coordinates
      
     // 3. Replicate Animations for Overlay Thumb
     val animationSpec = if (isSliderInteracting) {
@@ -164,33 +174,81 @@ fun PlayerScreen(
     // val isLiquidEnabled REMOVED (Enforced Liquid Glass)
     // --- PORTAL STATE HOISTING END ---
 
+    // --- PORTAL STATE HOISTING END ---
+    
+    // [NEW] Predictive Back State
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    
+    // [NEW] Handle Back Press with Predictive Animation
+    androidx.activity.compose.PredictiveBackHandler { progress ->
+        try {
+            progress.collect { event ->
+                backProgress = event.progress
+            }
+            onDismiss()
+        } catch (e: java.util.concurrent.CancellationException) {
+            backProgress = 0f
+        }
+    }
+
     val context = LocalContext.current
 
     // --- LIQUID COLOR LOGIC REMOVED (White Background Only) ---
+    
+    // [NEW] Shared Progress State for Dual Render
+    // Lifted from local scope to support Ghost Track
+    val currentProgress = if (isDragging) dragProgress else (if (duration > 0) progress / duration.toFloat() else 0f)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .onGloballyPositioned {
-                val pos = it.positionInRoot()
-                if (pos.getDistance() > 0) rootPosition = pos
-            } // [NEW] Capture Global Root Pos Only if Valid
+            .background(Color.Transparent) // [FIX] Transparent background to reveal underlying content
+            .graphicsLayer {
+                val scale = 1f - (backProgress * 0.1f)
+                scaleX = scale
+                scaleY = scale
+                translationY = backProgress * 100.dp.toPx()
+                alpha = 1f - (backProgress * 0.2f)
+                clip = true
+                shape = RoundedCornerShape((backProgress * 32).dp)
+            }
 
 
     ) {
-        // [NEW] Haze Source Box: Wraps Background + Track
+        // [NEW] Haze Source Box: Wraps Background Only
         // This Box contains the elements to be blurred/refracted.
-        // It does NOT contain the Sinks (GlassThumb, Dialogs), avoiding recursion.
         Box(
              modifier = Modifier
                  .fillMaxSize()
+                 .onGloballyPositioned { containerPosition = it.positionInRoot() }
                  .haze(state = finalHazeState) 
         ) {
-            Box(
+              // B. Album Art Overlay (Blurred)
+              AsyncImage(
+                 model = ImageRequest.Builder(context)
+                     .data(currentSong?.albumArtUri)
+                     .build(),
+                 contentDescription = null,
+                 contentScale = ContentScale.Crop,
                  modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
+                     .fillMaxSize()
+                     .blur(40.dp) 
+             )
+             // Lighter Overlay
+             Box(
+                 modifier = Modifier
+                     .fillMaxSize()
+                     .background(Color.Black.copy(alpha = 0.3f))
+             )
+             // [RESTORED] Simple Haze Source (just Background)
+             // Phantom layout removed as per user request to simplify.
+        }
+
+        // Foreground: Interactions & Controls
+        Box(
+             modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
                         var accumulation = androidx.compose.ui.geometry.Offset.Zero
                         var triggered = false
 
@@ -232,29 +290,10 @@ fun PlayerScreen(
                         }
                         }
                     )
-                }) {
-             
-             // B. Album Art Overlay (Blurred)
-             AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(currentSong?.albumArtUri)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(40.dp) // [FIX] Reduced blur for better "see-through" effect 
-            )
-            // Lighter Overlay
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.3f))
-            )
-        }
-
-        // 2. Main Layout
-        Column(
+                }
+        ) {
+            // 2. Main Layout
+            Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
@@ -267,12 +306,25 @@ fun PlayerScreen(
             Spacer(modifier = Modifier.weight(1f))
             
             // B. Large Album Art
+            // [SHARED ELEMENT] Cover Art Morphing
+            val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                with(sharedTransitionScope) {
+                    Modifier.sharedElement(
+                        state = rememberSharedContentState(key = "album_art"),
+                        animatedVisibilityScope = animatedVisibilityScope
+                    )
+                }
+            } else {
+                Modifier
+            }
+
             Card(
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
+                    .then(sharedModifier) // Apply shared element
                     .shadow(20.dp, RoundedCornerShape(16.dp))
             ) {
                 AsyncImage(
@@ -287,7 +339,9 @@ fun PlayerScreen(
             
             // C. Metadata & Icons Row
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp), // [FIX] Enforce fixed height to match Phantom
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -333,45 +387,11 @@ fun PlayerScreen(
 
 
 
-            // 2. The Slider (Source Element - Render Tracks only)
-                GlassProgressSlider(
-                    value = if (isDragging) dragProgress else progress / duration.toFloat().coerceAtLeast(1f),
-                    onValueChange = { newPercent ->
-                        isDragging = true
-                        dragProgress = newPercent
-                    },
-                    onValueChangeFinished = {
-                        isDragging = false
-                        viewModel.seekTo((dragProgress * duration).toLong())
-                    },
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    isGlassEnabled = true, // [ENFORCED Liquid Glass]
-                    hazeState = null, // [FIX] Revert to null. Slider is already in Source Wrapper!
-                    renderThumb = false, // We render the sink physically outside
-                    onInteractionChange = { isSliderInteracting = it },
-                    onLayoutCoordinates = { 
-                        val pos = it.positionInRoot()
-                        if (pos.getDistance() > 0) sliderPosition = pos
-                    }
-                )
-            
-            // 3. Portal Sink: Glass Thumb Overlay
-            // Rendered here, outside the Haze Source, as a sibling.
-            if (duration > 0) { // [ENFORCED Liquid Glass] 
-                 // Calculate Thumb Offset based on progress
-                 // We need the width of the slider to calculate offset. 
-                 // Assuming standard padding (24dp horizontal). The slider fills width.
-                 // Wait, we need the exact slider width. 
-                 // Let's rely on BoxWithConstraints in GlassProgressSlider? No, we are outside.
-                 // We can use a BoxOverlay over the whole Column?
-                 // Or just place it in a sibling Box that matches the Column alignment?
-            }
-            
-            // Time Labels
+            // Time Labels (Moved Above)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(bottom = 8.dp), // [FIX] Spacing below labels, above slider
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
@@ -389,6 +409,37 @@ fun PlayerScreen(
                      fontWeight = FontWeight.Medium
                 )
             }
+
+                // 2. The Slider (Foreground: Thumb + Interaction)
+                GlassProgressSlider(
+                    value = if (isDragging) dragProgress else progress / duration.toFloat().coerceAtLeast(1f),
+                    onValueChange = { newPercent ->
+                        isDragging = true
+                        dragProgress = newPercent
+                    },
+                    onValueChangeFinished = {
+                        isDragging = false
+        viewModel.seekTo((dragProgress * duration).toLong())
+                    },
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    isGlassEnabled = true,
+                    hazeState = finalHazeState, 
+                    onInteractionChange = { isSliderInteracting = it }
+                )
+            
+            // 3. Portal Sink: Glass Thumb Overlay
+            // Rendered here, outside the Haze Source, as a sibling.
+            if (duration > 0) { // [ENFORCED Liquid Glass] 
+                 // Calculate Thumb Offset based on progress
+                 // We need the width of the slider to calculate offset. 
+                 // Assuming standard padding (24dp horizontal). The slider fills width.
+                 // Wait, we need the exact slider width. 
+                 // Let's rely on BoxWithConstraints in GlassProgressSlider? No, we are outside.
+                 // We can use a BoxOverlay over the whole Column?
+                 // Or just place it in a sibling Box that matches the Column alignment?
+            }
+            
+
             
             Spacer(modifier = Modifier.height(30.dp))
             
@@ -587,50 +638,7 @@ fun PlayerScreen(
         // REMOVED local RepeatModeMenu call
 
 
-        // 6. PORTAL SINK LAYER: Glass Thumb Overlay
-        // This is now a SIBLING of the Source, ensuring proper Haze capture without recursion.
-        if (sliderPosition != androidx.compose.ui.geometry.Offset.Zero && rootPosition != androidx.compose.ui.geometry.Offset.Zero && !isLyricsVisible) { // [ENFORCED Liquid Glass]
-             // 1. Calculate Relative Offset
-             val relativeX = sliderPosition.x - rootPosition.x
-             val relativeY = sliderPosition.y - rootPosition.y
-             
-             // 2. Thumb Dimensions and Centering
-             val baseWidth = 34.dp
-             val baseHeight = 20.dp
-             val animatedThumbWidth = baseWidth * currentScale
-             val animatedThumbHeight = baseHeight * currentScale
-             
-             // 3. Center Vertically relative to Slider Height (30.dp)
-             val sliderHeight = 30.dp
-             val verticalCenterOffset = (sliderHeight - animatedThumbHeight) / 2
-             
-             // 4. Center Horizontally relative to Progress
-             val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
-             val sliderWidth = screenWidth - 48.dp
-             val totalWidthPx = with(LocalDensity.current) { sliderWidth.toPx() }
-             val thumbWidthPx = with(LocalDensity.current) { animatedThumbWidth.toPx() }
-             
-             val progressRatio = if (duration > 0) progress / duration.toFloat() else 0f
-             val centerPos = totalWidthPx * if (isDragging) dragProgress else progressRatio
-             val thumbOffsetX = centerPos - (thumbWidthPx / 2)
-             
-             val finalX = relativeX + thumbOffsetX
-             val finalY = relativeY + with(LocalDensity.current) { verticalCenterOffset.toPx() }
-             
-             // Render the Floating Thumb
-             com.vagueplayer.music.ui.components.GlassThumb(
-                 modifier = Modifier
-                     .offset { IntOffset(finalX.roundToInt(), finalY.roundToInt()) }
-                     .zIndex(100f), 
-                 width = animatedThumbWidth,
-                 height = animatedThumbHeight,
-                 edgeWidth = currentEdgeWidth,
-                 distortionStrength = currentDistortion,
-                 trackScale = currentTrackScale, 
-                 hazeState = finalHazeState, // Shared State
-                 isGlassEnabled = true
-             )
-        }
+        // 6. PORTAL SINK LAYER: Glass Thumb Overlay (REMOVED - Using Internal Render)
 
         // 4. Loop Count Dialog (High Z-Index)
         if (showLoopCountDialog) {

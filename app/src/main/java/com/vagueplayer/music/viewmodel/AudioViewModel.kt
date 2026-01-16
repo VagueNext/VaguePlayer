@@ -790,6 +790,47 @@ class AudioViewModel(
         val counts = _playCounts.value
         return playlist.songs.maxByOrNull { counts[it.id] ?: 0 }
     }
+    
+    // Sort songs in a playlist manually
+    fun reorderPlaylist(playlistId: String, fromIndex: Int, toIndex: Int) {
+        val currentPlaylists = _userPlaylists.value.toMutableList()
+        val index = currentPlaylists.indexOfFirst { it.id == playlistId }
+        if (index != -1) {
+            val playlist = currentPlaylists[index]
+            val songs = playlist.songs
+            
+            if (fromIndex in songs.indices && toIndex in songs.indices) {
+                val song = songs.removeAt(fromIndex)
+                songs.add(toIndex, song)
+                
+                // Force Update
+                 _userPlaylists.value = ArrayList(currentPlaylists) 
+                savePlaylists()
+            }
+        }
+    }
+
+    // Remove song from playlist
+    fun removeSongFromPlaylist(playlistId: String, songId: Long) {
+         val currentPlaylists = _userPlaylists.value.toMutableList()
+        val index = currentPlaylists.indexOfFirst { it.id == playlistId }
+        if (index != -1) {
+            val playlist = currentPlaylists[index]
+            playlist.songs.removeAll { it.id == songId }
+            
+             // Force Update
+             _userPlaylists.value = ArrayList(currentPlaylists) 
+            savePlaylists()
+        }
+    }
+    
+    // Remove from Queue (Current Playback)
+    fun removeFromQueue(index: Int) {
+         mediaController?.removeMediaItem(index)
+         // Listener will update _currentQueue automatically
+         
+         // If we removed the current playing song, player logic handles it (skips to next or stops).
+    }
 
     // Playback Controls
     // Playback Controls

@@ -24,7 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -57,7 +57,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun MiniPlayer(
     viewModel: AudioViewModel,
@@ -65,7 +69,9 @@ fun MiniPlayer(
     hazeState: HazeState? = null,
     collapseProgress: Float = 0f, // [NEW] Controls animation
     onExpand: () -> Unit,
-    onPlaylistClick: () -> Unit
+    onPlaylistClick: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope? = null, // [NEW] Shared Element Scope
+    animatedVisibilityScope: AnimatedVisibilityScope? = null // [NEW] Visibility Scope
 ) {
     val isPlaying by viewModel.isPlaying.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
@@ -98,11 +104,7 @@ fun MiniPlayer(
 
     Box(
         modifier = modifier
-            .fillMaxWidth()
-            .bouncyClickable(
-                targetScale = 1.05f, 
-                onClick = onExpand
-            ), // Standardized Bouncy Touch
+            .fillMaxWidth(), // [FIX] Removed clickable from parent (blocked by child draggable)
         contentAlignment = Alignment.CenterStart
     ) {
         // Re-implement swipe logic
@@ -111,6 +113,7 @@ fun MiniPlayer(
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .fillMaxSize()
                 .padding(horizontal = 8.dp) // [RESIZE] Reduced padding for more space
+                .clickable(onClick = onExpand) // [FIX] Clickable MUST be on the same node as draggable (or above it in modifier chain)
                 .draggable(
                     state = swipeableState,
                     orientation = Orientation.Horizontal,
@@ -135,9 +138,23 @@ fun MiniPlayer(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Album Art / Icon [RESIZE]
+                // [SHARED ELEMENT] Cover Art Morphing
+                val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                    with(sharedTransitionScope) {
+                        Modifier.sharedElement(
+                            state = rememberSharedContentState(key = "album_art"),
+                            animatedVisibilityScope = animatedVisibilityScope,
+                            renderInOverlayDuringTransition = false
+                        )
+                    }
+                } else {
+                    Modifier
+                }
+
                 Box(
                     modifier = Modifier
                         .padding(start = 3.dp) // [USER REQUEST] Shift right 2dp (Total 3dp)
+                        .then(sharedModifier) // Apply shared element here
                         .size(28.dp) // [RESIZE] User requested 28dp
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.LightGray)
@@ -164,7 +181,8 @@ fun MiniPlayer(
                         color = Color.Black.copy(alpha = 0.8f), 
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, // [FIX] Ellipsis
-                        lineHeight = 14.sp // [FIX] Tight line height
+                        lineHeight = 14.sp, // [FIX] Tight line height
+                        modifier = Modifier
                     )
                     Text(
                         text = currentSong?.artist ?: "Vague Player",
@@ -198,7 +216,7 @@ fun MiniPlayer(
                         modifier = Modifier.size(32.dp) // [RESIZE] Compact button
                     ) {
                         Icon(
-                            imageVector = Icons.Default.List,
+                            imageVector = Icons.AutoMirrored.Filled.List,
                             contentDescription = "Playlist",
                             tint = Color.Black.copy(alpha = 0.8f * playlistAlpha),
                             modifier = Modifier.size(20.dp) // [RESIZE]

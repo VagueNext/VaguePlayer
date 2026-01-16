@@ -27,30 +27,78 @@ import androidx.compose.runtime.collectAsState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.graphics.graphicsLayer // [FIX] Added import
+import androidx.compose.animation.core.Animatable // [FIX] Added import
+import androidx.compose.runtime.rememberCoroutineScope // [FIX] Added import
+import androidx.compose.material.icons.filled.Close // [FIX] Restored import
+import dev.chrisbanes.haze.haze // [FIX] Added haze import
 
 
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     hazeState: dev.chrisbanes.haze.HazeState? = null,
-    viewModel: com.vagueplayer.music.viewmodel.AudioViewModel
+    viewModel: com.vagueplayer.music.viewmodel.AudioViewModel,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null
 ) {
-    // State for Demo
-    // State for Demo
-    // var showDialog by remember { mutableStateOf(false) }
-    
+    // ... (States omitted for brevity, keeping original logic)
     // State
     var showFolderDialog by remember { mutableStateOf(false) }
     
     // Collect Preferences
     val isMixAudioEnabled by viewModel.isMixAudioEnabled.collectAsState()
+    
+    // Local Haze State for Settings (Fixes Ghosting)
+    val settingsHazeState = remember { dev.chrisbanes.haze.HazeState() }
+    
+    // Predictive Back State
+    val swipeProgress = remember { androidx.compose.animation.core.Animatable(0f) }
+    var isBackGestureActive by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    
+    // Predictive Back Handler
+    androidx.activity.compose.PredictiveBackHandler { progress ->
+        try {
+            isBackGestureActive = true
+            progress.collect { event ->
+                swipeProgress.snapTo(event.progress)
+            }
+            // On Commit
+            onBack()
+        } catch (e: java.util.concurrent.CancellationException) {
+            // On Cancel
+            isBackGestureActive = false
+            swipeProgress.animateTo(0f)
+        }
+    }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Animation Values (Derived from swipeProgress)
+    val scale = 1f - (swipeProgress.value * 0.1f)
+    val cornerRadius = 16.dp * swipeProgress.value
+    // Optional: Slide feedback
+    // val translationY = 100.dp * swipeProgress.value 
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Transparent) // [FIX] Transparent background to reveal underlying content
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Apply Predictive Back Transforms
+                .graphicsLayer { // [FIX] Correct syntax
+                    scaleX = scale
+                    scaleY = scale
+                    clip = true
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius)
+                    // translationY = translationY.toPx() 
+                }
                 .background(Color.White)
+                // [FIX] Apply Haze Source HERE, so dialogs blur THIS content
+                .haze(settingsHazeState) // [FIX] Correct syntax
                 .padding(16.dp)
         ) {
             // Top Bar
@@ -67,6 +115,17 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color.Black,
                     modifier = Modifier.padding(start = 8.dp)
+                        .then(
+                            if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                                with(sharedTransitionScope) {
+                                    Modifier.sharedElement(
+                                        state = rememberSharedContentState(key = "settings_text"),
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        renderInOverlayDuringTransition = false
+                                    )
+                                }
+                            } else Modifier
+                        )
                 )
             }
 
@@ -77,7 +136,7 @@ fun SettingsScreen(
                     subtitle = "不独占音频焦点 (混合播放)",
                     checked = isMixAudioEnabled,
                     onCheckedChange = { viewModel.setMixAudioEnabled(it) },
-                    hazeState = hazeState
+                    hazeState = settingsHazeState // [FIX] Use Local Haze
                 )
                 
                 val isGaplessEnabled by viewModel.isGaplessEnabled.collectAsState()
@@ -86,7 +145,7 @@ fun SettingsScreen(
                     subtitle = "自动跳过首尾静音片段 切歌时声音不间断",
                     checked = isGaplessEnabled,
                     onCheckedChange = { viewModel.setGaplessEnabled(it) },
-                    hazeState = hazeState
+                    hazeState = settingsHazeState // [FIX] Use Local Haze
                 )
             }
 
@@ -112,7 +171,7 @@ fun SettingsScreen(
                     subtitle = if(isSidebarLeft) "左侧 (Left)" else "右侧 (Right)",
                     checked = isSidebarLeft,
                     onCheckedChange = { viewModel.setSidebarOnLeft(it) },
-                    hazeState = hazeState
+                    hazeState = settingsHazeState // [FIX] Use Local Haze
                 )
             }
     
@@ -134,7 +193,7 @@ fun SettingsScreen(
         if (showFolderDialog) {
             FolderManagerDialog(
                 viewModel = viewModel,
-                hazeState = hazeState,
+                hazeState = settingsHazeState, // [FIX] Use Local Haze
                 onDismiss = { showFolderDialog = false }
             )
         }

@@ -22,7 +22,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue // [FIX] Added setValue
 import androidx.compose.runtime.remember
+import androidx.compose.material.icons.filled.Delete // [FIX] Added Delete Icon
+import androidx.compose.material3.SwipeToDismissBox // [FIX] Added
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +62,20 @@ fun GlassPlaylistOverlay(
     val currentQueue by viewModel.currentQueue.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
     val playlists by viewModel.userPlaylists.collectAsState()
+
+    // [NEW] Predictive Back
+    var backProgress by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    
+    androidx.activity.compose.PredictiveBackHandler(enabled = isVisible) { progress ->
+        try {
+            progress.collect { event ->
+                backProgress = event.progress
+            }
+            onDismiss()
+        } catch (e: java.util.concurrent.CancellationException) {
+            backProgress = 0f
+        }
+    }
 
     AnimatedVisibility(
         visible = isVisible,
@@ -258,65 +277,108 @@ fun GlassPlaylistOverlay(
 
                         } else {
                             // Existing Queue Logic
-                            itemsIndexed(currentQueue) { index, song ->
+                            itemsIndexed(currentQueue, key = { _, song -> song.id }) { index, song ->
                                 val isCurrent = song.id == currentSong?.id
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
-                                        .clickable { viewModel.playFromQueue(index) },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // 1. Indicator / Index
-                                    Box(
-                                        modifier = Modifier.width(32.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (isCurrent) {
-                                            Icon(
-                                                Icons.Default.PlayArrow,
-                                                null,
-                                                tint = AccentBlue,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                
+                                val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+                                    confirmValueChange = {
+                                        if (it == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                                            viewModel.removeFromQueue(index)
+                                            true
                                         } else {
-                                            Text(
-                                                text = "${index + 1}",
-                                                color = Color.Black,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
+                                            false
                                         }
                                     }
-                                    
-                                    // 2. Album Cover
-                                    AsyncImage(
-                                        model = song.albumArtUri,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
+                                )
+                                
+                                androidx.compose.material3.SwipeToDismissBox(
+                                    state = dismissState,
+                                    backgroundContent = {
+                                        val color = androidx.compose.animation.animateColorAsState(
+                                            if (dismissState.targetValue == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) Color.Red.copy(alpha = 0.8f) else Color.Transparent,
+                                            label = "SwipeColor"
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(color.value)
+                                                .padding(horizontal = 20.dp),
+                                            contentAlignment = Alignment.CenterEnd
+                                        ) {
+                                            // [FIX] Hide icon if not swiping (prevent ghosting through transparent content)
+                                            val iconAlpha by androidx.compose.animation.core.animateFloatAsState(
+                                                targetValue = if (dismissState.targetValue == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) 1f else 0f,
+                                                label = "IconAlpha"
+                                            )
+                                            
+                                            androidx.compose.material3.Icon(
+                                                Icons.Default.Delete,
+                                                contentDescription = "Delete",
+                                                tint = Color.White.copy(alpha = iconAlpha) // Animate Tint Alpha
+                                            )
+                                        }
+                                    },
+                                    enableDismissFromStartToEnd = false
+                                ) {
+                                    Row(
                                         modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color.LightGray)
-                                    )
-                                    
-                                    Spacer(modifier = Modifier.width(12.dp))
+                                            .fillMaxWidth()
+                                            .background(Color.White.copy(alpha = 0.01f)) // Capture clicks
+                                            .clickable { viewModel.playFromQueue(index) }
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // 1. Indicator / Index
+                                        Box(
+                                            modifier = Modifier.width(32.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isCurrent) {
+                                                Icon(
+                                                    Icons.Default.PlayArrow,
+                                                    null,
+                                                    tint = AccentBlue,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "${index + 1}",
+                                                    color = Color.Black,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                        
+                                        // 2. Album Cover
+                                        AsyncImage(
+                                            model = song.albumArtUri,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color.LightGray)
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.width(12.dp))
 
-                                    // 3. Text Info
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = song.title,
-                                            color = if (isCurrent) AccentBlue else Color.Black,
-                                            fontSize = 16.sp,
-                                            maxLines = 1,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Text(
-                                            text = song.artist,
-                                            color = Color.Black,
-                                            fontSize = 14.sp,
-                                            maxLines = 1
-                                        )
+                                        // 3. Text Info
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = song.title,
+                                                color = if (isCurrent) AccentBlue else Color.Black,
+                                                fontSize = 16.sp,
+                                                maxLines = 1,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = song.artist,
+                                                color = Color.Black,
+                                                fontSize = 14.sp,
+                                                maxLines = 1
+                                            )
+                                        }
                                     }
                                 }
                                 if (index < currentQueue.lastIndex) {

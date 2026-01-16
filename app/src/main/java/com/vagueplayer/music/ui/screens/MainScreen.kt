@@ -4,14 +4,24 @@ import android.Manifest
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import com.vagueplayer.music.data.model.Playlist // [FIX] Added import
+import androidx.compose.foundation.lazy.LazyColumn // [NEW]
+
+import androidx.compose.foundation.lazy.rememberLazyListState // [FIX] Added missing import
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween // [NEW]
+import androidx.compose.ui.unit.IntSize // [NEW]
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,19 +31,25 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState // [NEW]
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.verticalScroll // [NEW]
+import androidx.compose.foundation.layout.width // [FIX] Added
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.RadioButton // [NEW]
 import androidx.compose.material3.RadioButtonDefaults // [NEW]
 import androidx.compose.material3.Text
@@ -45,8 +61,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.Surface // [NEW]
+import androidx.compose.material3.Scaffold // [NEW]
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow // [NEW]
 import androidx.compose.ui.unit.dp
+import com.vagueplayer.music.ui.animation.ExpandableContainer // [FIX] Added
+import com.vagueplayer.music.ui.animation.transformSource // [FIX] Added
+import androidx.compose.material.icons.Icons // [FIX] Added imports for Icons used in shared code
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton // [FIX] Added
+import coil.compose.AsyncImage // [FIX] Added
+import androidx.compose.ui.layout.ContentScale // [FIX] Added
 import androidx.compose.ui.unit.sp
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -64,20 +94,21 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha // [FIX] Added import
 import androidx.compose.ui.draw.shadow
-import androidx.compose.material.icons.Icons
+// import androidx.compose.material.icons.Icons // [FIX] Removed duplicate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlaylistPlay // [NEW]
-import androidx.compose.material.icons.filled.PlaylistAdd // [NEW]
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay // [NEW]
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay // [FIX] Updated to AutoMirrored
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd // [FIX] Updated to AutoMirrored
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd // [FIX] Added auto-mirrored import
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.vagueplayer.music.ui.components.waterDropGlass
+import com.vagueplayer.music.ui.animation.ExpandableContainer // [NEW] Framework
+import com.vagueplayer.music.ui.animation.transformSource // [NEW] Framework
 import androidx.activity.compose.BackHandler
 
 import androidx.compose.foundation.layout.imePadding
@@ -92,6 +123,7 @@ import androidx.compose.ui.focus.focusRequester
 
 import com.vagueplayer.music.ui.screens.SettingsScreen
 import com.vagueplayer.music.ui.screens.FolderManagerScreen
+
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -136,7 +168,8 @@ fun MainScreen() {
     var currentPage by remember { mutableIntStateOf(0) }
     var showPlayer by remember { mutableStateOf(false) }
     var showPlaylistGlobal by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
+    var selectedPlaylist by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) } // [NEW] Playlist Container State
+    var showSettings by remember { mutableStateOf(false) } // [FIX] Settings State Managed Here
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     
     val importPlaylistLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -223,11 +256,13 @@ fun MainScreen() {
         audioViewModel.performSearch(searchText)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(nestedScrollConnection) // [NEW] Attach Scroll Listener
-    ) {
+    @OptIn(ExperimentalSharedTransitionApi::class)
+    SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(nestedScrollConnection) // [NEW] Attach Scroll Listener
+        ) {
         
         // -------------------------------------------------------------------------
         // SOURCE LAYER: Content to be blurred
@@ -322,8 +357,18 @@ fun MainScreen() {
                             }
                         }
                     }
-                } else {
-                    // Normal Pager UI
+            } // End Search Mode block
+
+            // Pager Layer (Background) - Visible when Settings is NOT open
+            // Note: If Search is active, Pager is hidden by Search UI (z-order or logic).
+            // But to be safe and replicate original else logic:
+            if (!isSearchActive) {
+                AnimatedVisibility(
+                    visible = !showSettings,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.fillMaxSize()
+                ) {
                     SwipeablePager(
                         pageCount = 3,
                         selectedIndex = currentPage,
@@ -332,22 +377,27 @@ fun MainScreen() {
                         Box(modifier = Modifier.fillMaxSize()) {
                             when (pageIndex) {
                                 0 -> LibraryScreen(
-                                    hazeState = null, // No internal Haze to avoid recursion
+                                    hazeState = null,
                                     onShowSortOptions = { anchor ->
                                         sortMenuAnchor = anchor
                                         showSortMenu = true
                                     }
                                 )
                                 1 -> PlaylistScreen(
-                                    hazeState = null, 
+                                    hazeState = null,
                                     onCreatePlaylist = { showCreatePlaylistDialog = true },
                                     onShowAddMenu = { anchor ->
                                         playlistMenuAnchor = anchor
                                         showPlaylistMenu = true
-                                    }
+                                    },
+                                    onPlaylistClick = { playlist -> 
+                                        selectedPlaylist = playlist 
+                                    },
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = this@AnimatedVisibility
                                 )
                                 2 -> ProfileScreen(
-                                    hazeState = null, // [FIX] Disable blur to prevent SIGSEGV
+                                    hazeState = null,
                                     onNavigateToSettings = { showSettings = true },
                                     onQuickAction = { action ->
                                         when (action) {
@@ -355,51 +405,91 @@ fun MainScreen() {
                                             "favorites" -> showFavoritesOverlay = true
                                             "removed" -> showRemovedOverlay = true
                                         }
-                                    }
+                                    },
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = this@AnimatedVisibility
                                 )
                             }
                         }
                     }
                 }
-            } // End Content Box
-        } // End Haze Source Box
+            }
+        } // End Wrapper Box
+    } // End Haze Source Box
 
         // -------------------------------------------------------------------------
         // SINK LAYER: Glass Overlays & Dialogs (Must be Siblings of Source)
         // -------------------------------------------------------------------------
 
-        // 1. Bottom Dock
+        // 1. Bottom Dock (ALWAYS MOUNTED for Shared Element Target validity)
+        // [Verified Fix] We keep `visible = true` to ensure the Shared Element Target is always in the Composition.
+        // We use manual Alpha/Offset to hide it when the Player is open.
+        val isDockVisible = !showPlayer && (!isSearchActive || isSelectionMode)
+        val dockAlpha by animateFloatAsState(
+            targetValue = if (isDockVisible) 1f else 0f, // [RESTORE] Proper Auto-Hide
+            animationSpec = tween(durationMillis = 300),
+            label = "DockFade"
+        )
+
+        // Wrapper to provide AnimatedVisibilityScope (Required for sharedElement)
         AnimatedVisibility(
-            visible = !showPlayer && (!isSearchActive || isSelectionMode),
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(100)),
-            modifier = Modifier.align(Alignment.BottomCenter)
+            visible = !showPlayer,
+            enter = androidx.compose.animation.EnterTransition.None, 
+            exit = androidx.compose.animation.ExitTransition.None,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .zIndex(20f)
         ) {
-                     // Enforced Liquid Dock (No Version Check/Fallback)
-             com.vagueplayer.music.ui.components.UnifiedGlassDock(
-                    modifier = Modifier.fillMaxWidth(),
-                    hazeState = hazeState, 
-                    // Defaults applied automatically
-                    // blurRadius, tint, edgeWidth, distortionStrength from LiquidGlassDefaults
-                    collapseProgress = dockCollapseProgress, // [NEW] Animation Driver
-                    onExpandPlayer = { showPlayer = true },
-                    onSearchClick = { 
-                        // Toggle Search Mode regardless of selection
-                        isSearchActive = !isSearchActive
-                    },
-                    isSelectionMode = isSelectionMode,
-                    playerContent = {
-                        MiniPlayer(
-                            viewModel = audioViewModel,
-                            modifier = Modifier.fillMaxSize(),
-                            hazeState = null, // Disable internal Haze
-                            collapseProgress = dockCollapseProgress, // [NEW] Pass animation state
-                            onExpand = { showPlayer = true },
-                            onPlaylistClick = { showPlaylistGlobal = true }
-                        )
-                    },
-                    navContent = {
-                        if (isSelectionMode) {
+             Box(
+                 modifier = Modifier
+                    .graphicsLayer { 
+                        alpha = dockAlpha
+                        // Hide interaction when invisible
+                        translationY = if (dockAlpha == 0f) 100f else 0f 
+                    }
+                    .fillMaxWidth()
+             ) {
+                 // Enforced Liquid Dock (No Version Check/Fallback)
+                 com.vagueplayer.music.ui.components.UnifiedGlassDock(
+                        modifier = Modifier.fillMaxWidth(),
+                        hazeState = hazeState, 
+                        // Defaults applied automatically
+                        // blurRadius, tint, edgeWidth, distortionStrength from LiquidGlassDefaults
+                        availableWidth = LocalConfiguration.current.screenWidthDp.dp, // [FIX] Pass screen width for immediate layout
+                        collapseProgress = dockCollapseProgress, // [NEW] Animation Driver
+                        onExpandPlayer = { showPlayer = true }, // [FIX] Always allow expand if clickable
+                        onSearchClick = { 
+                            isSearchActive = !isSearchActive // [FIX] Always allow toggle
+                        },
+                        isSelectionMode = isSelectionMode,
+                        playerContainerModifier = Modifier
+                             .zIndex(1f) // Ensure Source is optically on top
+                             .zIndex(1f) // Ensure Source is optically on top
+                             .transformSource(
+                                 key = "container_transform", 
+                                 sharedTransitionScope = this@SharedTransitionLayout,
+                                 animatedVisibilityScope = this@AnimatedVisibility,
+                                 renderInOverlay = true // [ENABLE] Safe for MiniPlayer (Stable)
+                             ),
+                        // [FIX] Removed container sharedElement to avoid Glass RenderEffect conflicts.
+                        // We will rely on Album Art Shared Element + Standard Spring Pop instead.
+                        playerContent = {
+
+                            MiniPlayer(
+                                viewModel = audioViewModel,
+                                modifier = Modifier
+                                    .fillMaxSize(),
+                                    // [MOVED] Shared Element now on Container
+                                hazeState = null, // Disable internal Haze
+                                collapseProgress = dockCollapseProgress, // [NEW] Pass animation state
+                                onExpand = { if (isDockVisible) showPlayer = true },
+                                onPlaylistClick = { if (isDockVisible) showPlaylistGlobal = true },
+                                sharedTransitionScope = this@SharedTransitionLayout,
+                                animatedVisibilityScope = this@AnimatedVisibility
+                            )
+                        },
+                        navContent = {
+                            if (isSelectionMode) {
                             // Selection Mode Actions
                              Row(
                                 modifier = Modifier.fillMaxSize(),
@@ -434,14 +524,14 @@ fun MainScreen() {
                                             audioViewModel.clearSelection()
                                         }
                                     }) {
-                                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.PlaylistPlay, null, tint = Color.Gray)
+                                        androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null, tint = Color.Gray)
                                     }
                                 }
                                 
                                 // 4. Add to Playlist
                                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { showAddToPlaylist = true }) {
-                                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.PlaylistAdd, null, tint = Color.Gray) 
+                                        androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, tint = Color.Gray) 
                                     }
                                 }
                             }
@@ -486,8 +576,8 @@ fun MainScreen() {
                         )
                     }
                 )
-            // Fallback Dock REMOVED
-        }
+            } // Close Box
+        } // Close AnimatedVisibility
 
         // 2. Search Floating Pill (Sibling)
         AnimatedVisibility(
@@ -631,13 +721,24 @@ fun MainScreen() {
             )
         }
 
-        AnimatedVisibility(
-            visible = showPlayer,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it }),
-            modifier = Modifier.fillMaxSize()
+
+
+        // [FIX] Shared Element Container Transition ("Hero Animation")
+        // Split AnimatedVisibility:
+        // 1. Dimming Layer: Fades out immediately (Standard)
+        // 2. Player Container: Stays Opaque during Morph (Delayed Fade) to ensure "Shrink" is visible.
+        
+        // [FIX] Unified Container Transform (Player Expand)
+        ExpandableContainer(
+            isExpanded = showPlayer,
+            key = "container_transform",
+            onDismissRequest = { showPlayer = false },
+            modifier = Modifier.fillMaxSize(), // Target expands to Full Screen
+            // sharedTransitionScope = this@SharedTransitionLayout, // Implicit receiver
         ) {
             PlayerScreen(
+                sharedTransitionScope = this@SharedTransitionLayout,
+                animatedVisibilityScope = this@ExpandableContainer, // Scope from ExpandableContainer's internal AnimatedVisibility
                 viewModel = audioViewModel,
                 onDismiss = { showPlayer = false },
                 onTogglePlaylist = { showPlaylistGlobal = true },
@@ -645,11 +746,12 @@ fun MainScreen() {
                     repeatMenuAnchor = anchor
                     showRepeatMenu = true
                 },
-                // [FIX] Use dedicated Player HazeState. 
-                // This allows the Player to be a Source for the PlaylistOverlay, while independent of the Library.
-                hazeState = playerHazeState 
+                hazeState = playerHazeState,
+                isOverlayVisible = showPlaylistGlobal || showAddToPlaylist || showFavoritesOverlay || showRecentOverlay || showRemovedOverlay || showSettings  
             )
         }
+
+
 
         // [MOVED] Playlist Overlays - Z-Index: Top of Player
         com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
@@ -688,6 +790,73 @@ fun MainScreen() {
                 customSongs = favSongs,
                 customTitle = "收藏歌曲"
             )
+        }
+
+
+
+        // [NEW] Playlist Detail Container Transform
+        val playlist = selectedPlaylist
+        // Identify the playlist to render: either the currently selected one, or the last one (for exit animation)
+        var presentingPlaylist by remember { mutableStateOf<Playlist?>(null) }
+        if (playlist != null) {
+            presentingPlaylist = playlist
+        }
+        
+        val activePlaylist = presentingPlaylist
+        
+        if (activePlaylist != null) {
+
+    
+            BackHandler(enabled = playlist != null) { selectedPlaylist = null } // [NEW] Handle Back Gesture
+            
+            // 3. Playlist Detail "Page" (Full Screen, Solid Background)
+
+            ExpandableContainer(
+                isExpanded = selectedPlaylist != null,
+                key = "playlist_card_${activePlaylist.id}",
+                onDismissRequest = { selectedPlaylist = null },
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Color.White,
+                cornerRadius = 0.dp,
+                renderInOverlay = true
+            ) {
+                val animatedScope = this
+                PlaylistDetailScreen(
+                    playlist = activePlaylist,
+                    viewModel = audioViewModel,
+                    onDismissRequest = { selectedPlaylist = null },
+                    animatedVisibilityScope = animatedScope
+                ) // End Box Maint Content
+            } // End AnimatedVisibility Wrapper
+        } // End if (activePlaylist != null)
+
+
+
+        
+        // 4. Settings Container Transform
+        ExpandableContainer(
+            isExpanded = showSettings,
+            key = "settings_card",
+            onDismissRequest = { showSettings = false },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp), // Settings usually has some padding or is full screen?  
+                // Wait, user says "Expand to Settings Screen". A Screen is usually Full Size.
+                // Let's make it fillMaxSize but maybe with a small margin if it's a "Card" style,
+                // OR just fillMaxSize like Player.
+                // Let's assume Full Screen for Settings.
+            containerColor = Color.White,
+            cornerRadius = 28.dp // Match Player
+        ) {
+              // We need to wrap SettingsScreen content. SettingsScreen usually manages its own Scaffold/Surface.
+              // If SettingsScreen has a transparent background, we are good.
+              // If it has a solid background, we should ensure it matches containerColor.
+              SettingsScreen(
+                  onBack = { showSettings = false },
+                  viewModel = audioViewModel,
+                  sharedTransitionScope = this@SharedTransitionLayout,
+                  animatedVisibilityScope = this@ExpandableContainer // Scope from ExpandableContainer's internal AnimatedVisibility
+              )
         }
 
         // [NEW] Recent Overlay
@@ -787,6 +956,7 @@ fun MainScreen() {
             }
 
 
+
         // [NEW] Hoisted Playlist Action Menu
         // [NEW] Hoisted Playlist Action Menu
         // Launcher moved to top
@@ -845,10 +1015,11 @@ fun MainScreen() {
 
 
         // 4. Settings Screen (Full Screen Overlay)
+        // [REF] Using Unified Animation Framework
         AnimatedVisibility(
             visible = showSettings,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            enter = com.vagueplayer.music.ui.theme.AnimationUtils.standardEnter,
+            exit = com.vagueplayer.music.ui.theme.AnimationUtils.standardExit,
             modifier = Modifier
                 .zIndex(500f) // Above everything
                 .fillMaxSize()
@@ -861,7 +1032,7 @@ fun MainScreen() {
         }
 
 
-    } // End Root Box
+
 
     // Back Handlers
     // Back Handlers (LIFO - Last Defined = First Handled)
@@ -875,7 +1046,8 @@ fun MainScreen() {
     BackHandler(enabled = showRecentOverlay) { showRecentOverlay = false }
     BackHandler(enabled = showAddToPlaylist) { showAddToPlaylist = false }
     BackHandler(enabled = showAddToPlaylist) { showAddToPlaylist = false }
-    BackHandler(enabled = showPlaylistGlobal) { showPlaylistGlobal = false }
+    BackHandler(enabled = showAddToPlaylist) { showAddToPlaylist = false }
+
 
     
     // 2. Full Screen Settings
@@ -897,4 +1069,12 @@ fun MainScreen() {
     BackHandler(enabled = showPlaylistMenu) { showPlaylistMenu = false }
     BackHandler(enabled = showRepeatMenu) { showRepeatMenu = false }
     BackHandler(enabled = showSortMenu) { showSortMenu = false }
-}
+    
+    // [FIX] Playlist Global Overlay (Highest Priority for Overlay Stack)
+    // Moved here to ensure it closes BEFORE PlayerScreen if both are open.
+    BackHandler(enabled = showPlaylistGlobal) { showPlaylistGlobal = false }
+    } // End Root Box
+    } // End SharedTransitionLayout
+} // End MainScreen
+
+

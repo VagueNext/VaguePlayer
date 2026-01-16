@@ -35,17 +35,19 @@ fun UnifiedGlassDock(
     searchContent: @Composable () -> Unit,
     onExpandPlayer: () -> Unit,
     onSearchClick: () -> Unit,
-    isSelectionMode: Boolean = false, // New parameter
-    collapseProgress: Float = 0f // [NEW] 0f = Expanded, 1f = Collapsed
+    isSelectionMode: Boolean = false,
+    availableWidth: Dp,
+    collapseProgress: Float = 0f,
+    playerContainerModifier: Modifier = Modifier // [NEW] Allow external styling/sharedElement on the capsule container
 ) {
-    BoxWithConstraints(
+    Box( // Standard Box instead of BoxWithConstraints
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 20.dp)
             .navigationBarsPadding(),
         contentAlignment = Alignment.BottomCenter
     ) {
-        val maxWidth = maxWidth
+        val maxWidth = availableWidth - 16.dp // Adjust for horizontal padding (8*2)
         
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -83,11 +85,12 @@ fun UnifiedGlassDock(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .offset(y = playerOffsetY) // [RESTORE] Smooth Drop Down
-                    // .alpha(playerAlpha) REMOVED
-                    .padding(horizontal = playerPadding) // [ANIMATION] Shrink effect
-                    .height(38.dp), // [RESIZE] Compact Player
-                contentAlignment = Alignment.Center
+                .offset(y = playerOffsetY) // [RESTORE] Smooth Drop Down
+                // .alpha(playerAlpha) REMOVED
+                .padding(horizontal = playerPadding) // [ANIMATION] Shrink effect
+                .height(38.dp) // [RESIZE] Compact Player
+                .then(playerContainerModifier), // [APPLY] External Shared Element here matches Outer Geometry
+            contentAlignment = Alignment.Center
             ) {
                 // MERGED LAYER: CONTENT INSIDE GLASS
                 // Applying waterDropGlass to the container ensures the content inside 

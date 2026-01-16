@@ -61,25 +61,20 @@ fun GlassProgressSlider(
     modifier: Modifier = Modifier,
     isGlassEnabled: Boolean = true, // CONTROL FLAG
     hazeState: HazeState? = null, // Injectable source
-    onInteractionChange: (Boolean) -> Unit = {},
-    renderThumb: Boolean = true,
-    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null
+    onInteractionChange: (Boolean) -> Unit = {}
 ) {
-    // Local interaction state removed in favor of hoisted state or internal state
-    // We keep internal state for basic usage if onInteractionChange not used?
-    // Actually, to support both modes:
+    // Local interaction state
     var internalInteracting by remember { mutableStateOf(false) }
     
-    // We use a side effect to report internal changes if needed, but for now let's assume parent drives it OR we drive it.
-    // Let's use internal state as driver, and report up.
-    val isInteracting = internalInteracting
+    // Use external if provided, otherwise internal
+    val effectiveInteracting = internalInteracting
 
     // Dynamic Animation Spec based on interaction state
     // 使用统一的弹性形变系统 (Unified ElasticDeformation)
-    val animationSpec = if (isInteracting) {
-        com.vagueplayer.music.ui.animation.AnimationSpecs.ElasticSnappy  // 按下: 快速响应
+    val animationSpec = if (effectiveInteracting) {
+        androidx.compose.animation.core.spring<Float>(dampingRatio = 0.6f, stiffness = 800f)
     } else {
-        com.vagueplayer.music.ui.animation.AnimationSpecs.ElasticJelly   // 释放: 液态回弹
+        androidx.compose.animation.core.spring<Float>(dampingRatio = 0.4f, stiffness = 300f)
     }
 
     // 4. Interaction Animation: SCALE Strategy
@@ -87,17 +82,13 @@ fun GlassProgressSlider(
     // Switching to Modifier.scale() is safer as the underlying RenderNode stays constant size.
     
     // Fixed Base Dimensions (Compact Capsule)
-    val baseWidth = 34.dp
-    val baseHeight = 20.dp
+    val baseWidth = 48.dp
+    val baseHeight = 24.dp
     
     // 4. Interaction Animation: SCALE Strategy
     // User Request: "Magnify on click, retract on release"
     // Non-linear physics: Snappy Down, Jelly Up (handled by animationSpec)
-    val currentScale by animateFloatAsState(
-        targetValue = if (isInteracting) 1.2f else 1.0f,
-        animationSpec = animationSpec,
-        label = "GlassScale"
-    )
+    val currentScale by animateFloatAsState(targetValue = if (effectiveInteracting) 1.2f else 1.0f, animationSpec = animationSpec, label = "GlassScale")
 
     // Physics
     // We scale the edge width and distortion based on interaction.
@@ -109,7 +100,7 @@ fun GlassProgressSlider(
     // BOOST: Use much higher distortion for the Lens Effect (was 60/30)
     // Adjusted for new Shader Logic (1.5x multiplier + Spherize): Less is More now.
     val currentDistortion by animateFloatAsState(
-        targetValue = if (isInteracting) 65.0f else 50.0f, // Reduced peak to 65.0f
+        targetValue = if (effectiveInteracting) 65.0f else 50.0f, // Reduced peak to 65.0f
         label = "Distortion Strength"
     )
 
@@ -117,8 +108,9 @@ fun GlassProgressSlider(
     // val localHazeState = remember { HazeState() }
 
     // 5. Track Animation: Scale Height
+    // [FIX] Decoupled from Thumb Interaction (Always 1.0f)
     val currentTrackScale by animateFloatAsState(
-        targetValue = if (isInteracting) 1.5f else 1.0f, // 4dp -> 6dp
+        targetValue = 1.0f, 
         animationSpec = animationSpec,
         label = "TrackScale"
     )
@@ -127,7 +119,6 @@ fun GlassProgressSlider(
         modifier = modifier
             .fillMaxWidth()
             .height(30.dp) // Touch Area Height
-            .then(if (onLayoutCoordinates != null) Modifier.onGloballyPositioned(onLayoutCoordinates) else Modifier)
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -180,54 +171,58 @@ fun GlassProgressSlider(
         val offsetX = centerPos - (thumbWidthPx / 2)
         
         // Active Track Alignment
-        // FIX: The user perceives the "Round Cap" inside the glass as "Perspective Magnification" (Bulge).
-        // To fix this, we Square Off the end of the track so it looks like a clean cut/line, 
-        // purely flat and mechanical (No "Lens" effect).
-        val activeTrackWidthPx = centerPos 
+        // [FIX] Stop Track BEFORE the Glass Thumb to avoid "Binding" / internal refraction.
+        // The active track should end exactly where the thumb begins.
+        val activeTrackWidthPx = offsetX.coerceAtLeast(0f)
         val activeTrackWidth = with(LocalDensity.current) { activeTrackWidthPx.toDp() }
 
+        GlassTrack(
+            modifier = Modifier.fillMaxWidth(),
+            currentTrackScale = currentTrackScale,
+            activeTrackWidth = activeTrackWidth,
+            animatedTrackHeight = animatedTrackHeight
+        )
+        
+        GlassThumb(
+            modifier = Modifier
+                .offset { IntOffset(offsetX.roundToInt(), 0) }
+                .align(Alignment.CenterStart),
+            width = animatedThumbWidth,
+            height = animatedThumbHeight,
+            edgeWidth = currentEdgeWidth, distortionStrength = currentDistortion,
+            trackScale = currentTrackScale, 
+            hazeState = hazeState,
+            isGlassEnabled = isGlassEnabled
+        )
+    }
+}
+
+@Composable
+fun GlassTrack(
+    modifier: Modifier = Modifier,
+    currentTrackScale: Float,
+    activeTrackWidth: Dp,
+    animatedTrackHeight: Dp
+) {
+    Box(modifier = modifier) {
+        // Inactive
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                // [NEW] If thumb is rendered EXTERNALLY, we assume THIS track is the Source
-                // If thumb is rendered INTERNALLY, we also need it as Source
-                // To support both, we keep it here.
-                // .then(if (hazeState != null) Modifier.haze(hazeState) else Modifier) // [REMOVED] Redundant/Dangerous Source
-        ) {
-            // Inactive
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(animatedTrackHeight)
-                    .align(Alignment.Center)
-                    .clip(RoundedCornerShape(100))
-                    .background(Color.White.copy(alpha = 0.3f)) // White Track
-            )
-            // Active
-            Box(
-                modifier = Modifier
-                    .width(activeTrackWidth)
-                    .height(animatedTrackHeight)
-                    .align(Alignment.CenterStart)
-                    .clip(RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50, topEndPercent = 50, bottomEndPercent = 50))
-                    .background(Color.White) // White Active Track
-            )
-        }
-        
-        if (renderThumb) {
-            GlassThumb(
-                modifier = Modifier
-                    .offset { IntOffset(offsetX.roundToInt(), 0) }
-                    .align(Alignment.CenterStart),
-                width = animatedThumbWidth,
-                height = animatedThumbHeight,
-                edgeWidth = currentEdgeWidth,
-                distortionStrength = currentDistortion,
-                trackScale = currentTrackScale, // Pass the track scale
-                hazeState = hazeState,
-                isGlassEnabled = isGlassEnabled
-            )
-        }
+                .height(animatedTrackHeight)
+                .align(Alignment.Center)
+                .clip(RoundedCornerShape(100))
+                .background(Color.White.copy(alpha = 0.3f))
+        )
+        // Active
+        Box(
+            modifier = Modifier
+                .width(activeTrackWidth)
+                .height(animatedTrackHeight)
+                .align(Alignment.CenterStart)
+                .clip(RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50, topEndPercent = 50, bottomEndPercent = 50))
+                .background(Color.White)
+        )
     }
 }
 
@@ -268,16 +263,14 @@ fun GlassThumb(
             // but we might override visual content.
             // Let's keep waterDropGlass for the physical "Material" properties (blur, edge distortion of background)
             .waterDropGlass(
-                hazeState = if (isGlassEnabled) hazeState else null, 
+                hazeState = if (isGlassEnabled) hazeState else null, // [RESTORE] Need Haze for Distortion source
                 // Match Player Controls White (Milky Glass)
-                blurRadius = 0.dp,
-                tint = if (isGlassEnabled) Color.White.copy(alpha = 0.2f) else Color.White, // [FIX] Increased visibility (Frosted Glass) 
+                blurRadius = 0.dp, // [KEEP] Blur = 0 as requested
+                tint = if (isGlassEnabled) Color.White.copy(alpha = 0.05f) else Color.White, 
                 cornerRadius = height / 2,
-                // Use Passed Parameter (3.dp or calculated)
                 edgeWidth = if (isGlassEnabled) edgeWidth else 0f, 
-                // Use Passed Parameter (60f or calculated)
-                distortionStrength = if (isGlassEnabled) distortionStrength else 0f,
-                aberrationStrength = 0f, // DISABLE Rainbow/Green effect completely
+                distortionStrength = if (isGlassEnabled) distortionStrength else 0f, // [RESTORE] Distortion enabled
+                aberrationStrength = 0f, 
                 enableShader = isGlassEnabled,
                 time = time 
             )

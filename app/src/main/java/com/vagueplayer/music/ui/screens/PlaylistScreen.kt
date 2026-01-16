@@ -11,12 +11,20 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.spring
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,7 +40,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.positionInRoot // [FIX] Added missing import
+import androidx.compose.ui.layout.positionInRoot
 
 import dev.chrisbanes.haze.HazeState
 import com.vagueplayer.music.ui.components.GlassDialog
@@ -51,12 +59,17 @@ import androidx.compose.material.icons.filled.Edit
 import com.vagueplayer.music.ui.components.PlaylistActionMenu
 import android.widget.Toast
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+import com.vagueplayer.music.ui.animation.transformSource
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 fun PlaylistScreen(
     onCreatePlaylist: () -> Unit,
-    onShowAddMenu: (androidx.compose.ui.geometry.Offset) -> Unit, // [NEW] Hoisted Menu
-    hazeState: HazeState? = null
+    onShowAddMenu: (androidx.compose.ui.geometry.Offset) -> Unit,
+    hazeState: HazeState? = null,
+    onPlaylistClick: (Playlist) -> Unit,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null
 ) {
     val context = LocalContext.current
     val viewModel: AudioViewModel = viewModel(factory = AudioViewModelFactory(context))
@@ -64,25 +77,21 @@ fun PlaylistScreen(
     val allSongs by viewModel.songs.collectAsState()
 
     // Dialog & UI States
-    var showDetailDialog by remember { mutableStateOf(false) }
-    var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    // showDetailDialog REMOVED - Hoisted
+    var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) } // Keep for logic? No, MainScreen controls selection.
+    // Actually, delete/export might still need local selection tracking if they are context menus.
+    // Let's keep a local `selectedPlaylistForAction` for Delete/Rename, but Detail is external.
+    var playlistForAction by remember { mutableStateOf<Playlist?>(null) } 
     
-
-    
-    // showMenu REMOVED - Hoisted to MainScreen
     var isExportMode by remember { mutableStateOf(false) }
-    var playlistToExportId by remember { mutableStateOf<String?>(null) } // Changed to String
-
-    // addButtonPosition REMOVED - Passed via Callback
-
-
+    var playlistToExportId by remember { mutableStateOf<String?>(null) }
 
     // Management States
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
 
-    // File Pickers
+    // File Pickers (Keeping existing logic)
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
@@ -96,12 +105,12 @@ fun PlaylistScreen(
             uri?.let { 
                 playlistToExportId?.let { id -> viewModel.exportPlaylistToTxt(id, it) }
             }
-            isExportMode = false // Reset mode
+            isExportMode = false
             playlistToExportId = null
         }
     )
 
-    // Root Box for Z-Layering (Content + Overlays)
+    // Root Box
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -117,7 +126,6 @@ fun PlaylistScreen(
                     title = if (isExportMode) "选择导出歌单" else "歌单",
                     action = {
                         Box {
-
                             var localBtnPos by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
                             IconButton(
                                 onClick = { onShowAddMenu(localBtnPos) },
@@ -132,8 +140,6 @@ fun PlaylistScreen(
                                     modifier = Modifier.size(28.dp)
                                 )
                             }
-                            
-                            
                         }
                     }
                 )
@@ -155,205 +161,120 @@ fun PlaylistScreen(
                                     playlistToExportId = playlist.id
                                     exportLauncher.launch("${playlist.name}.txt")
                                 } else {
-                                    selectedPlaylist = playlist
-                                    showDetailDialog = true
+                                    onPlaylistClick(playlist)
                                 }
                             },
                             onLongClick = {
                                 if (!isExportMode) {
-                                    selectedPlaylist = playlist
+                                    playlistForAction = playlist
                                     showDeleteDialog = true
                                 }
-                            }
+                            },
+                            sharedTransitionScope = sharedTransitionScope,
+                            animatedVisibilityScope = animatedVisibilityScope
                         )
                     }
                 }
             }
         }
     
+        // Delete Dialog
+        if (showDeleteDialog && playlistForAction != null) {
+            com.vagueplayer.music.ui.components.GlassAlertDialog(
+                hazeState = hazeState,
+                title = "删除歌单",
+                description = "确定要删除歌单 '${playlistForAction!!.name}' 吗？此操作无法撤销。",
+                icon = Icons.Default.Delete,
+                confirmText = "删除",
+                onConfirm = {
+                    playlistForAction?.let { viewModel.deletePlaylist(it.id) }
+                    showDeleteDialog = false
+                    playlistForAction = null
+                },
+                onDismiss = { showDeleteDialog = false }
+            )
+        }
 
-    
-    // Delete Dialog (Unified Interface)
-    if (showDeleteDialog && selectedPlaylist != null) {
-        com.vagueplayer.music.ui.components.GlassAlertDialog(
-            hazeState = hazeState,
-            title = "删除歌单",
-            description = "确定要删除歌单 '${selectedPlaylist!!.name}' 吗？此操作无法撤销。",
-            icon = Icons.Default.Delete,
-            confirmText = "删除",
-            onConfirm = {
-                selectedPlaylist?.let { viewModel.deletePlaylist(it.id) }
-                showDeleteDialog = false
-                selectedPlaylist = null
-            },
-            onDismiss = { showDeleteDialog = false }
-        )
-    }
-
-    // Rename Dialog (Unified Interface)
-    if (showRenameDialog && selectedPlaylist != null) {
-        // Pre-fill logic is handled by initialValue, but we need to ensure state is fresh
-        // Since InputDialog uses 'remember { initialValue }', it might not update if key isn't changed.
-        // But here showRenameDialog toggles, so the composable enters/leaves composition.
-        
-        com.vagueplayer.music.ui.components.GlassInputDialog(
-            hazeState = hazeState,
-            title = "重命名歌单",
-            initialValue = renameText, // Passed from state
-            icon = Icons.Default.Edit,
-            onConfirm = { newName ->
-                if (newName.isNotBlank()) {
-                     selectedPlaylist?.let { viewModel.renamePlaylist(it.id, newName) }
-                }
-                showRenameDialog = false
-            },
-            onDismiss = { showRenameDialog = false }
-        )
-    }
-    
-    // Create Playlist Dialog logic hoisted to MainScreen...
-
-    // Playlist Detail & Add Song Logic
-    if (showDetailDialog && selectedPlaylist != null) {
-        val playlist = selectedPlaylist!!
-        // Re-read playlist from list to get updates
-        val currentPlaylist = playlists.find { it.id == playlist.id } ?: playlist
-
-        Dialog(onDismissRequest = { 
-            showDetailDialog = false 
-            selectedPlaylist = null
-        }) {
-            // Glass Detail Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(600.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .clip(RoundedCornerShape(24.dp))
-            ) {
-                // 1. Background (Glass)
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .waterDropGlass(
-                            hazeState = hazeState,
-                            cornerRadius = 24.dp
-                        )
-                )
-
-                // 2. Content
-                Column(modifier = Modifier.padding(20.dp)) {
-                    // Header
-                    Text(
-                        text = currentPlaylist.name,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black.copy(alpha = 0.8f),
-                        modifier = Modifier.clickable {
-                             renameText = currentPlaylist.name
-                             showRenameDialog = true
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    if (currentPlaylist.songs.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                             Text("暂无歌曲", color = Color.Gray)
-                        }
-                    } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(currentPlaylist.songs) { song ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { viewModel.playSong(song, currentPlaylist.songs, currentPlaylist.name) }
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // Album Art with Shadow
-                                    AsyncImage(
-                                        model = song.albumArtUri,
-                                        contentDescription = "Cover",
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color.LightGray),
-                                        contentScale = ContentScale.Crop,
-                                        error = androidx.compose.ui.res.painterResource(id = android.R.drawable.ic_menu_crop)
-                                    )
-                                    
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    
-                                    // Text Info
-                                    Column {
-                                        Text(
-                                            text = song.title,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = Color.Black.copy(alpha = 0.9f),
-                                            maxLines = 1
-                                        )
-                                        Text(
-                                            text = song.artist,
-                                            fontSize = 12.sp,
-                                            color = Color.Black.copy(alpha = 0.6f),
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                                // No divider needed for clean look
-                            }
-                        }
+        // Rename Dialog
+        if (showRenameDialog && playlistForAction != null) {
+            com.vagueplayer.music.ui.components.GlassInputDialog(
+                hazeState = hazeState,
+                title = "重命名歌单(Safe)",
+                initialValue = renameText,
+                icon = Icons.Default.Edit,
+                onConfirm = { newName ->
+                    if (newName.isNotBlank()) {
+                         playlistForAction?.let { viewModel.renamePlaylist(it.id, newName) }
                     }
-                }
-            }
-                // OVERLAY LAYER - Playlist Action Menu (Hoisted)
-                // OVERLAY LAYER - Playlist Action Menu (Hoisted)
-         // REMOVED local PlaylistActionMenu call
-    } // End Root Box
-}
-        
-        // Add Song Picker (Nested)
-
+                    showRenameDialog = false
+                },
+                onDismiss = { showRenameDialog = false }
+            )
+        }
     }
 }
+        
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PlaylistCard(
     playlist: Playlist,
     coverSong: Song?, // Passed from outside
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null
 ) {
     Column(
         modifier = Modifier
             .width(160.dp)
+            .then(
+                 if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                     with(sharedTransitionScope) {
+                          Modifier.transformSource(
+                              key = "playlist_card_${playlist.id}",
+                              sharedTransitionScope = this,
+                              animatedVisibilityScope = animatedVisibilityScope,
+                                  renderInOverlay = true
+                          )
+                     }
+                 } else Modifier
+            )
             .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
     ) {
+        // [SHARED ELEMENT SOURCE] Image
         Box(
             modifier = Modifier
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.White.copy(alpha = 0.5f)), // Fallback glass
+                .background(Color.LightGray), // Fallback
             contentAlignment = Alignment.Center
         ) {
+
             if (coverSong != null) {
-                // Show Most Played Song Cover
                 AsyncImage(
                     model = coverSong.albumArtUri,
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    contentScale = ContentScale.Crop, // [USER] Must be Crop
+                    modifier = Modifier
+                        .then(
+                            if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                                with(sharedTransitionScope) {
+                                    Modifier.sharedElement(
+                                        state = rememberSharedContentState(key = "playlist_cover_${playlist.id}"),
+                                        animatedVisibilityScope = animatedVisibilityScope
+                                    )
+                                }
+                            } else Modifier
+                        )
+                        .fillMaxSize()
                 )
-                // Optional: Scrim to make text readable if we put text over it?
-                // The design shows text BELOW the card.
             } else {
                 // Empty State
                 Text(
@@ -367,12 +288,24 @@ fun PlaylistCard(
         
         Spacer(modifier = Modifier.height(8.dp))
         
+        // [SHARED ELEMENT SOURCE] Text
         Text(
             text = playlist.name,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = Color.Black.copy(alpha = 0.8f),
-            maxLines = 1
+            maxLines = 1,
+            modifier = Modifier
+                .then(
+                     if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                         with(sharedTransitionScope) {
+                             Modifier.sharedElement(
+                                 state = rememberSharedContentState(key = "playlist_title_${playlist.id}"),
+                                 animatedVisibilityScope = animatedVisibilityScope
+                             )
+                         }
+                     } else Modifier
+                )
         )
         
         Text(
