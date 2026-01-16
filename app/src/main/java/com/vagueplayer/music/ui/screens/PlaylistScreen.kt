@@ -263,7 +263,8 @@ fun PlaylistCard(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(coverSong.albumArtUri)
                         .crossfade(true)
-                        .memoryCacheKey(coverSong.albumArtUri?.toString()) // 🔥 Key matches Detail Screen URL
+                        // 🔥【改这里】用 ID 当做唯一身份证！
+                        .memoryCacheKey("cover_cache_${playlist.id}") 
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,

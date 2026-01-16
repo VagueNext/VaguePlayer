@@ -84,8 +84,8 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                         .data(coverUrl)
                         // 🔥 CRITICAL: Disable crossfade in Target
                         .crossfade(false)
-                        // 🔥 CRITICAL: Use SAME URL string as key
-                        .placeholderMemoryCacheKey(coverUrl)
+                        // 🔥 CRITICAL: Use SAME ID-based key
+                        .placeholderMemoryCacheKey("cover_cache_${playlist.id}")
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
