@@ -119,6 +119,7 @@ fun PlaylistScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding() // [FIX] Avoid status bar overlap
                 .padding(horizontal = 20.dp)
         ) {
             Column {
