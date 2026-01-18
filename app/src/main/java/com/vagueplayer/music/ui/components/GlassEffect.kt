@@ -47,84 +47,72 @@ val WaterDropGlassShader = """
     }
 
     half4 main(float2 fragCoord) {
+        // --- LIQUID GLASS V2 SHADER (visionOS Style) ---
         float2 center = uSize * 0.5;
         float2 localP = fragCoord - center;
         
-        // Standard SDF
+        // 1. SDF & NORMAL
         float d = sdRoundedBox(localP, center, uCornerRadius);
+        if (d > 0.0) return half4(0.0); // Clip
         
-        if (d > 0.0) return half4(0.0); // Clip outside
-
-        // --- 1. COMPUTE SDF GRADIENT (Surface Normal) ---
         float eps = 1.0;
         float dX = sdRoundedBox(localP + float2(eps, 0.0), center, uCornerRadius) -
                    sdRoundedBox(localP - float2(eps, 0.0), center, uCornerRadius);
         float dY = sdRoundedBox(localP + float2(0.0, eps), center, uCornerRadius) -
                    sdRoundedBox(localP - float2(0.0, eps), center, uCornerRadius);
-        float2 sdfNormal = normalize(float2(dX, dY) + 0.0001);
-
-        // --- 2. DISTANCE FIELD & EDGE MASK ---
-        // The 'd' variable is already calculated above.
-        // CRITICAL FIX: Restrict influence strictly to the edge width.
-        // Previously max(Radius*2) caused the gradient to bleed into the center.
+        float2 normal = normalize(float2(dX, dY));
+        
+        // 2. REFRACTION (Liquid Flow)
+        // We use the Normal vector to drive the displacement, simulating a curved lens surface.
+        // influence: How far the curve extends inwards.
         float influence = uEdgeWidth; 
+        float edgeFactor = smoothstep(-influence, 0.0, d); // 0(Inner) -> 1(Edge)
+        // Non-linear bulge profile for "surface tension" look
+        float lensProfile = pow(edgeFactor, 2.5); 
         
-        // edgeT: 0.0 (Center/Body) -> 1.0 (Edge/Border)
-        float edgeT = smoothstep(-influence, 0.0, d); 
-
-        // --- 3. REFRACTION CALCULATION (EDGE-ONLY MAGNIFICATION) ---
+        // Distortion Vector: Push pixels *away* from center (magnify) based on lens curvature
+        // The track "Stretching" comes from this gradient.
+        float2 distortion = normal * lensProfile * uDistortionStrength * 0.8;
+       
+        // Sample UV
+        float2 samplePos = fragCoord + distortion;
+        samplePos = clamp(samplePos, float2(1.0), uSize - 1.0); // Clamp to avoid bleeding
         
-        // Normalize coordinates (-1 to 1)
-        float2 uv = (fragCoord - center) / (uSize * 0.5);
+        // 3. CHROMATIC ABERRATION (Spectral Edges)
+        float chromaStrength = uAberrationStrength * 8.0 * lensProfile;
+        half4 color;
+        color.r = content.eval(samplePos - normal * chromaStrength).r;
+        color.g = content.eval(samplePos).g;
+        color.b = content.eval(samplePos + normal * chromaStrength).b;
+        color.a = 1.0;
         
-        // Usage of edgeT to mask the distortion
-        // distortionAmount increases as we get closer to the edge
-        // pow(edgeT, 3.0) Creates a smoother, wider curve (REALISTIC LENS)
-        float mask = pow(edgeT, 3.0);
+        // 4. SPECULARITY (Ridge Light)
+        // Simulating a top-down light source reflecting off the top curve
+        float3 lightDir = normalize(float3(0.0, -0.8, 0.5)); // Top-ish light
+        float3 viewDir = float3(0.0, 0.0, 1.0);
+        float3 surfaceNormal = normalize(float3(normal * lensProfile, 1.0)); // Approximated 3D normal
         
-        // Strength: Increased slightly as requested (0.005 -> 0.01)
-        float strength = uDistortionStrength * 0.01; 
+        // Specular Ridge: Sharp reflection line
+        float NdotL = max(0.0, dot(surfaceNormal, lightDir));
+        float specular = pow(NdotL, 30.0) * 0.8; // High sharpness
         
-        // Mag Factor: 1.0 (No change) -> <1.0 (Magnify) at edges
-        float f = 1.0 - (mask * strength); 
+        // Rim Light: Edge glow
+        float fresnel = pow(1.0 - max(0.0, dot(surfaceNormal, viewDir)), 4.0) * 0.5;
         
-        // Apply Distortion (Sample CLOSER to center -> Magnify)
-        float2 uvDistorted = uv * f;
+        // 5. INNER SHADOW / CONTRAST (Volume)
+        // Darken the "thick" parts of the glass slightly to give volume
+        float volume = smoothstep(0.0, -influence, d) * 0.1; 
         
-        // Remap back to pixels
-        float2 posDistorted = uvDistorted * (uSize * 0.5) + center;
-        float2 totalDistortion = posDistorted - fragCoord;
+        // COMPOSE
+        half3 finalColor = color.rgb;
+        finalColor += specular; // Add shine
+        finalColor += fresnel; // Add glow
+        finalColor -= volume; // Subtract volume (ambient occlusion)
         
-        float2 sampleUV = fragCoord + totalDistortion; 
+        // Mix Tint
+        finalColor = mix(finalColor, uTint.rgb, uTint.a);
         
-        // --- 4. EDGE CLAMPING ---
-        float2 safeMin = float2(1.0);
-        float2 safeMax = uSize - 1.0;
-        sampleUV = clamp(sampleUV, safeMin, safeMax);
-        
-        // --- 5. SAMPLE CONTENT ---
-        half4 sampledColor = content.eval(sampleUV); 
-        
-        // --- 6. EDGE HIGHLIGHTS (Fresnel/Specular) ---
-        // REMOVED: User requested to remove white highlights
-        float rim = 0.0; 
-        
-        // --- 7. CHROMATIC ABERRATION ---
-        // Split RGB along the radial direction
-        // Multiplier increased (3.0 -> 15.0) for visible rainbow effect at edges (Prism)
-        float chromaDist = uAberrationStrength * 15.0 * (f - 1.0); 
-        float2 chromaOffset = normalize(uv) * chromaDist;
-        
-        half r_channel = content.eval(clamp(sampleUV + chromaOffset, safeMin, safeMax)).r;
-        half b_channel = content.eval(clamp(sampleUV - chromaOffset, safeMin, safeMax)).b;
-        
-        // Reassemble
-        half3 baseColor = half3(r_channel, sampledColor.g, b_channel) + rim; 
-        
-        // --- 8. APPLY TINT ---
-        baseColor = mix(baseColor, uTint.rgb, uTint.a);
-
-        return half4(baseColor, sampledColor.a);
+        return half4(finalColor, 1.0);
     }
 """.trimIndent()
 
@@ -132,10 +120,10 @@ val WaterDropGlassShader = """
  * Global Defaults for Liquid Glass Visuals
  */
 object LiquidGlassDefaults {
-    val BlurRadius = 0.dp 
-    val EdgeWidth = 8.0f // [USER-REQUEST] 8.0
-    val DistortionStrength = 6.0f // [USER-REQUEST] 6.0
-    val Tint = Color.White.copy(alpha = 0.35f) // [USER-REQUEST] Added 15% to 20% = 35% White
+    val BlurRadius = 0.dp // [USER-REQUEST] Remove Frosted Glass (Clear)
+    val EdgeWidth = 15.0f 
+    val DistortionStrength = 15.0f 
+    val Tint = Color.White.copy(alpha = 0.02f) // [FIX] Max Transparency (2%)
     val CornerRadius = 32.dp
 }
 
@@ -151,7 +139,7 @@ fun Modifier.waterDropGlass(
     tint: Color = LiquidGlassDefaults.Tint,
     edgeWidth: Float = LiquidGlassDefaults.EdgeWidth,
     distortionStrength: Float = LiquidGlassDefaults.DistortionStrength,
-    aberrationStrength: Float = distortionStrength * 0.05f, 
+    aberrationStrength: Float = distortionStrength * 0.05f, // [REVERT] Restore volume
     enableShader: Boolean = true, 
     time: Float = 0f 
 ): Modifier = composed {
@@ -200,7 +188,6 @@ fun Modifier.waterDropGlass(
                     alpha = 0.99f 
                 }.hazeChild(
                     state = hazeState,
-                    shape = shape,
                     style = HazeStyle(
                         backgroundColor = tint,
                         tint = HazeTint(tint), 

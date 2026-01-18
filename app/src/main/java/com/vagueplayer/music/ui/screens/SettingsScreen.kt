@@ -118,10 +118,12 @@ fun SettingsScreen(
                         .then(
                             if (sharedTransitionScope != null && animatedVisibilityScope != null) {
                                 with(sharedTransitionScope) {
-                                    Modifier.sharedElement(
-                                        state = rememberSharedContentState(key = "settings_text"),
+                                    Modifier.sharedBounds(
+                                        sharedContentState = rememberSharedContentState(key = "settings_text"),
                                         animatedVisibilityScope = animatedVisibilityScope,
-                                        renderInOverlayDuringTransition = false
+                                        resizeMode = androidx.compose.animation.SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                                        enter = androidx.compose.animation.EnterTransition.None,
+                                        exit = androidx.compose.animation.ExitTransition.None
                                     )
                                 }
                             } else Modifier

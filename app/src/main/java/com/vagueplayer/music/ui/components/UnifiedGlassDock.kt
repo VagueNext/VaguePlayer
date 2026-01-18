@@ -132,28 +132,30 @@ fun UnifiedGlassDock(
             val dockItemRadius = dockItemSize / 2
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween, // Keep apart
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(dockItemSize), // [FIX] Force Row Height for strict alignment
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val expandedNavWidth = maxWidth - 16.dp - dockItemSize // Total - Spacing - Search
-                val collapsedNavWidth = 38.dp // [RESIZE] Target Circle Diameter
+                val expandedNavWidth = maxWidth - 16.dp - dockItemSize 
+                val collapsedNavWidth = 38.dp 
                 
-                // Linear Interpolation for Width
                 val currentNavWidth = (expandedNavWidth.value * (1 - collapseProgress) + collapsedNavWidth.value * collapseProgress).dp
 
                 // Main Nav Pill (Left/Center)
                 Box(
                     modifier = Modifier
-                        .width(currentNavWidth) // [ANIMATION] Dynamic Width
-                        .height(dockItemSize), // [ANIMATION] Dynamic Height
+                        .width(currentNavWidth) 
+                        .height(dockItemSize) 
+                        .align(Alignment.CenterVertically), // [FIX] Ensure alignment
                     contentAlignment = Alignment.Center
                 ) {
                     // LAYER 1: GLASS BACKGROUND
                     Box(
                         modifier = Modifier
-                            .fillMaxSize() // Fills the animated width
-                            .clip(RoundedCornerShape(dockItemRadius)) // [ANIMATION] Dynamic Radius
+                            .fillMaxSize() 
+                            .clip(RoundedCornerShape(dockItemRadius)) 
                             .waterDropGlass(
                                 hazeState = hazeState, 
                                 cornerRadius = dockItemRadius,
@@ -184,7 +186,8 @@ fun UnifiedGlassDock(
                 // Search Orb (Right) - Fixed Size
                 Box(
                     modifier = Modifier
-                        .size(dockItemSize), // [ANIMATION] Dynamic Size
+                        .size(dockItemSize)
+                        .align(Alignment.CenterVertically), // [FIX] Ensure alignment
                     contentAlignment = Alignment.Center
                 ) {
                     // LAYER 1: GLASS BACKGROUND

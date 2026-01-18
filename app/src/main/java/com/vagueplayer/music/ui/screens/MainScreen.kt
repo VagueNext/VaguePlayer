@@ -22,6 +22,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.togetherWith // [FIX] Added import
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.layout.Arrangement
@@ -383,19 +384,32 @@ fun MainScreen() {
                                         showSortMenu = true
                                     }
                                 )
-                                1 -> PlaylistScreen(
-                                    hazeState = null,
-                                    onCreatePlaylist = { showCreatePlaylistDialog = true },
-                                    onShowAddMenu = { anchor ->
-                                        playlistMenuAnchor = anchor
-                                        showPlaylistMenu = true
-                                    },
-                                    onPlaylistClick = { playlist -> 
-                                        selectedPlaylist = playlist 
-                                    },
-                                    sharedTransitionScope = this@SharedTransitionLayout,
-                                    animatedVisibilityScope = this@AnimatedVisibility
-                                )
+                                    // [Refactor] Wrap in AnimatedVisibility for Shared Element Scope & Fade Out
+                                    1 -> { // [FIX] Added '1 ->' label and block
+                                        androidx.compose.animation.AnimatedVisibility(
+                                            visible = selectedPlaylist == null,
+                                            enter = androidx.compose.animation.fadeIn(),
+                                            exit = androidx.compose.animation.fadeOut(),
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            val innerScope = this // [FIX] Capture implicit receiver
+                                            // [FIX] Ext function call via with()
+                                            with(this@SharedTransitionLayout) {
+                                                PlaylistScreen(
+                                                    onCreatePlaylist = { showCreatePlaylistDialog = true },
+                                                    onShowAddMenu = { anchor ->
+                                                        playlistMenuAnchor = anchor
+                                                        showPlaylistMenu = true
+                                                    },
+                                                    onPlaylistClick = { playlist -> 
+                                                        selectedPlaylist = playlist 
+                                                    },
+                                                    // sharedTransitionScope arg removed (it is receiver)
+                                                    animatedVisibilityScope = innerScope
+                                                )
+                                            }
+                                        }
+                                    }
                                 2 -> ProfileScreen(
                                     hazeState = null,
                                     onNavigateToSettings = { showSettings = true },
@@ -795,46 +809,34 @@ fun MainScreen() {
 
 
         // [NEW] Playlist Detail Container Transform
-        val playlist = selectedPlaylist
-        // Identify the playlist to render: either the currently selected one, or the last one (for exit animation)
-        var presentingPlaylist by remember { mutableStateOf<Playlist?>(null) }
-        if (playlist != null) {
-            presentingPlaylist = playlist
-        }
-        
-        val activePlaylist = presentingPlaylist
-        
-        if (activePlaylist != null) {
+        // [NEW] Playlist Detail Transition (Dual Key Architecture)
+        // [NEW] Playlist Detail Transition (Dual Key Architecture)
+        // BackHandler moved to PlaylistDetailScreen for better predictive back support
 
-    
-            BackHandler(enabled = playlist != null) { selectedPlaylist = null } // [NEW] Handle Back Gesture
-            
-            // 3. Playlist Detail "Page" (Full Screen, Solid Background)
-
-            ExpandableContainer(
-                isExpanded = selectedPlaylist != null,
-                key = "playlist_card_${activePlaylist.id}",
-                onDismissRequest = { selectedPlaylist = null },
-                modifier = Modifier.fillMaxSize(),
-                containerColor = Color.White,
-                cornerRadius = 0.dp,
-                renderInOverlay = true
-            ) {
-                val animatedScope = this
-                
-                // Calculate cover URL immediately for seamless transition
-                val mostPlayed = audioViewModel.getMostPlayedSong(activePlaylist)
-                val coverUrl = mostPlayed?.albumArtUri?.toString() ?: activePlaylist.songs.firstOrNull()?.albumArtUri?.toString()
+        // Replaces old ExpandableContainer logic
+        androidx.compose.animation.AnimatedContent(
+            targetState = selectedPlaylist,
+            transitionSpec = {
+                // Fade In/Out the page itself, Shared Bounds handles the geometry
+                 androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) togetherWith 
+                 androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))
+            },
+            label = "PlaylistDetailTransition",
+            modifier = Modifier.zIndex(100f) // Ensure it sits on top
+        ) { playlist ->
+            if (playlist != null) {
+                // Determine cover URL (either mostly played or first)
+                val coverUrl = audioViewModel.getMostPlayedSong(playlist)?.albumArtUri?.toString() 
+                    ?: playlist.songs.firstOrNull()?.albumArtUri?.toString()
                 
                 PlaylistDetailScreen(
-                    playlist = activePlaylist,
-                    coverUrl = coverUrl,
+                    playlist = playlist,
                     viewModel = audioViewModel,
                     onDismissRequest = { selectedPlaylist = null },
-                    animatedVisibilityScope = animatedScope
-                ) 
-            } // End AnimatedVisibility Wrapper
-        } // End if (activePlaylist != null)
+                    animatedVisibilityScope = this // From AnimatedContent
+                )
+            }
+        }
 
 
 

@@ -1,201 +1,281 @@
 package com.vagueplayer.music.ui.screens
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.Edit // [FIX] Import Edit Icon
+import androidx.compose.foundation.lazy.itemsIndexed // [FIX] Import itemsIndexed
+import androidx.compose.material3.*
+import androidx.compose.runtime.* // [FIX] expanded to * for remember, mutableState
+import androidx.activity.compose.PredictiveBackHandler // [FIX] Import
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer // [FIX] Import
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.res.painterResource // [FIX] Import
+import androidx.compose.ui.draw.clip // [FIX] Import
+import androidx.compose.ui.text.font.FontWeight // [FIX] Import
+import androidx.compose.ui.text.style.TextOverflow // [FIX] Import
+import androidx.compose.foundation.shape.RoundedCornerShape // [FIX] Import
+import androidx.compose.ui.unit.sp // [FIX] Import
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.vagueplayer.music.data.model.Playlist
 import com.vagueplayer.music.viewmodel.AudioViewModel
+import kotlinx.coroutines.flow.collect // [FIX] Import for flow collection
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun SharedTransitionScope.PlaylistDetailScreen(
     playlist: Playlist,
-    coverUrl: String?, // Pass URL directly from parent
-    viewModel: AudioViewModel,
-    onDismissRequest: () -> Unit,
+    viewModel: AudioViewModel, // Retained signature for potential future use (e.g. playing songs)
+    onDismissRequest: () -> Unit, // Renamed from onBack to match MainScreen call site? User snippet used onBack. MainScreen uses onDismissRequest. I'll use onDismissRequest.
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
-    val scrollState = rememberScrollState()
+    // Predictive Back State
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    val scale = 1f - (backProgress * 0.1f) // Scale down to 90%
+    val alpha = 1f - (backProgress * 0.2f) // Fade out slightly
+    val yOffset = backProgress * 100f // Slide down slightly
 
-    // 1. Root Box: Full Screen, No Padding
-    Box(
+    // Handle Predictive Back
+    androidx.activity.compose.PredictiveBackHandler { progress ->
+        try {
+            progress.collect { event ->
+                backProgress = event.progress
+            }
+            // On Commit
+            onDismissRequest()
+        } catch (e: java.util.concurrent.CancellationException) {
+            // On Cancel - ensure it snaps back (Compose state will handle this naturally when progress stops emitting, 
+            // but we reset manually to be safe if the flow cancellation leaves artifacts)
+            backProgress = 0f
+        } finally {
+             backProgress = 0f
+        }
+    }
+
+    // 1. Container Target (sharedBounds)
+    // State for Rename Dialog
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameText by remember { mutableStateOf(playlist.name) }
+
+    // 1. Container Target (sharedBounds)
+    Surface(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            // Apply Predictive Back Transform
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+                translationY = yOffset
+            }
+            .sharedBounds(
+                sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
+                animatedVisibilityScope = animatedVisibilityScope,
+                resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
+                enter = EnterTransition.None,
+                exit = ExitTransition.None
+            ),
+        color = MaterialTheme.colorScheme.background // Or darker color to contrast with white sheet?
     ) {
-        // 2. Content Layer
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             
-            // Header Image Placeholder
+            // 2. Image Header (Fixed at top)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(380.dp)
+                    .height(300.dp) // Reduced height slightly to give more space to list
             ) {
-                // A. Cover Image
+                val coverUri = playlist.songs.firstOrNull()?.albumArtUri
+                
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(coverUrl)
-                        // 🔥 CRITICAL: Disable crossfade in Target
+                        .data(coverUri)
                         .crossfade(false)
-                        // 🔥 CRITICAL: Use SAME ID-based key
-                        .placeholderMemoryCacheKey("cover_cache_${playlist.id}")
+                        .placeholderMemoryCacheKey("cover_${playlist.id}")
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(1f)
                         .sharedElement(
-                            state = rememberSharedContentState(key = "cover_${playlist.id}"), // Keep ID-based key for Geometry
-                            animatedVisibilityScope = animatedVisibilityScope,
-                            placeHolderSize = SharedTransitionScope.PlaceHolderSize.animatedSize,
-                            boundsTransform = { _, _ ->
-                                spring(dampingRatio = 0.8f, stiffness = 380f)
-                            }
-                        )
-                )
-
-                // B. Gradient
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(2f)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)),
-                                startY = 300f
-                            )
-                        )
-                )
-
-                // C. Title
-                Text(
-                    text = playlist.name,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(24.dp)
-                        .zIndex(3f)
-                        .sharedElement(
-                            state = rememberSharedContentState(key = "playlist_title_${playlist.id}"),
+                            state = rememberSharedContentState(key = "image_${playlist.id}"),
                             animatedVisibilityScope = animatedVisibilityScope,
                             boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
                         )
                 )
+
+                // Scrim for status bar / back button visibility
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(Color.Black.copy(alpha = 0.4f), Color.Transparent)
+                            )
+                        )
+                )
+
+                // Back Button (Top Left)
+                IconButton(
+                    onClick = onDismissRequest,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                        // [FIX] Removed graphicsLayer shadow which caused the "Box" effect
+                    )
+                }
             }
 
-            // Bottom List
-            Column(
+            // 3. White Sheet Content (List)
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .weight(1f), // Fill remaining space
+                color = Color.White,
+                // shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp), // [USER REQUEST] Removed rounded corners
+                tonalElevation = 0.dp
             ) {
-                Button(
-                    onClick = {
-                        if (playlist.songs.isNotEmpty()) {
-                            viewModel.playSong(playlist.songs.first(), playlist.songs, playlist.name)
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.fillMaxWidth()
+                androidx.compose.foundation.lazy.LazyColumn(
+                    contentPadding = PaddingValues(top = 24.dp, bottom = 100.dp)
                 ) {
-                    Icon(Icons.Default.PlayArrow, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("全部播放 (${playlist.songs.size})")
+                    // Title & Metadata Section
+                    item {
+                        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable { 
+                                    renameText = playlist.name
+                                    showRenameDialog = true 
+                                }
+                            ) {
+                                Text(
+                                    text = playlist.name,
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    modifier = Modifier
+                                        .weight(1f, fill = false) 
+                                        .sharedBounds(
+                                            sharedContentState = rememberSharedContentState(key = "title_${playlist.id}"),
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                                            enter = EnterTransition.None,
+                                            exit = ExitTransition.None
+                                        )
+                                )
+                                // [FIX] Removed Edit Icon
+                            }
+                            
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "${playlist.songs.size} 首歌曲",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
+                            Spacer(Modifier.height(24.dp))
+                        }
+                    }
+
+                    // Songs List
+                    itemsIndexed(playlist.songs) { index, song ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.playSong(song, playlist.songs, playlist.name)
+                                }
+                                .padding(horizontal = 8.dp, vertical = 8.dp), // [MATCH LIBRARY] 8dp padding
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                             // [MATCH LIBRARY] Album Art
+                            AsyncImage(
+                                model = song.albumArtUri,
+                                contentDescription = "Album Art",
+                                modifier = Modifier
+                                    .size(56.dp) 
+                                    .clip(RoundedCornerShape(8.dp)) 
+                                    .background(Color.Gray.copy(alpha = 0.3f)),
+                                contentScale = ContentScale.Crop,
+                                error = painterResource(id = android.R.drawable.ic_menu_crop) 
+                            )
+
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = song.title,
+                                    fontSize = 17.sp, // [MATCH LIBRARY] 17sp
+                                    fontWeight = FontWeight.Medium, // [MATCH LIBRARY] Medium
+                                    color = Color.Black,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = song.artist,
+                                    fontSize = 14.sp, // [MATCH LIBRARY] 14sp
+                                    color = Color.Gray,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                playlist.songs.forEachIndexed { index, song ->
-                     ListItem(
-                         headlineContent = { 
-                             Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis) 
-                         },
-                         supportingContent = { 
-                             Text("${song.artist} - ${song.album}", maxLines = 1, overflow = TextOverflow.Ellipsis) 
-                         },
-                         leadingContent = { 
-                              Text("${index + 1}", color = Color.Gray) 
-                         },
-                         modifier = Modifier.clickable { 
-                             viewModel.playSong(song, playlist.songs, playlist.name)
-                         }
-                     )
-                }
-                
-                Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 80.dp))
             }
         }
-
-        // 3. Floating Back Button
-        IconButton(
-            onClick = onDismissRequest,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(8.dp)
-                .zIndex(100f)
-        ) {
-            Surface(
-                color = Color.Black.copy(alpha = 0.3f),
-                shape = CircleShape,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White,
-                    modifier = Modifier.padding(8.dp)
+    }
+    
+    // Rename Dialog
+    if (showRenameDialog) {
+        com.vagueplayer.music.ui.components.GlassDialog(
+            hazeState = null, // Detail screen doesn't have HazeState handy usually, pass null or hoist
+            title = "重命名歌单",
+            description = "请输入新的歌单名称",
+            icon = androidx.compose.material.icons.Icons.Default.Edit,
+            onDismissRequest = { showRenameDialog = false },
+            confirmText = "保存",
+            onConfirm = {
+                if (renameText.isNotBlank()) {
+                    viewModel.renamePlaylist(playlist.id, renameText)
+                    showRenameDialog = false
+                }
+            },
+            cancelText = "取消",
+            onCancel = { showRenameDialog = false },
+            content = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = com.vagueplayer.music.ui.theme.AccentBlue,
+                        cursorColor = com.vagueplayer.music.ui.theme.AccentBlue
+                    )
                 )
             }
-        }
+        )
     }
 }

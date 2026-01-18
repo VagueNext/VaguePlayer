@@ -1,191 +1,124 @@
 package com.vagueplayer.music.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.animation.*
+import androidx.compose.foundation.background // [FIX]
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable // [FIX] Import
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.animation.core.spring
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.vagueplayer.music.data.model.Playlist
-import com.vagueplayer.music.data.model.Song
-import com.vagueplayer.music.ui.theme.AccentBlue
-import com.vagueplayer.music.viewmodel.AudioViewModel
-import com.vagueplayer.music.viewmodel.AudioViewModelFactory
+import androidx.compose.ui.unit.sp // [FIX]
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.positionInRoot
-
-import dev.chrisbanes.haze.HazeState
-import com.vagueplayer.music.ui.components.GlassDialog
-import com.vagueplayer.music.ui.components.waterDropGlass
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.graphics.SolidColor
-
-// Imports
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import com.vagueplayer.music.data.model.Playlist
+import com.vagueplayer.music.viewmodel.AudioViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.vagueplayer.music.viewmodel.AudioViewModelFactory
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import com.vagueplayer.music.ui.components.PlaylistActionMenu
-import android.widget.Toast
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import dev.chrisbanes.haze.HazeState
+import com.vagueplayer.music.ui.theme.AccentBlue
 
-import com.vagueplayer.music.ui.animation.transformSource
-
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun PlaylistScreen(
+fun SharedTransitionScope.PlaylistScreen(
     onCreatePlaylist: () -> Unit,
     onShowAddMenu: (androidx.compose.ui.geometry.Offset) -> Unit,
-    hazeState: HazeState? = null,
+    hazeState: HazeState? = null, // Deprecated usage but kept for signature compatibility if needed
     onPlaylistClick: (Playlist) -> Unit,
-    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
-    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val context = LocalContext.current
     val viewModel: AudioViewModel = viewModel(factory = AudioViewModelFactory(context))
     val playlists by viewModel.userPlaylists.collectAsState()
-    val allSongs by viewModel.songs.collectAsState()
-
-    // Dialog & UI States
-    // showDetailDialog REMOVED - Hoisted
-    var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) } // Keep for logic? No, MainScreen controls selection.
-    // Actually, delete/export might still need local selection tracking if they are context menus.
-    // Let's keep a local `selectedPlaylistForAction` for Delete/Rename, but Detail is external.
-    var playlistForAction by remember { mutableStateOf<Playlist?>(null) } 
     
-    var isExportMode by remember { mutableStateOf(false) }
-    var playlistToExportId by remember { mutableStateOf<String?>(null) }
-
     // Management States
+    // isManageMode removed - using long press for delete instead
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var showRenameDialog by remember { mutableStateOf(false) }
-    var renameText by remember { mutableStateOf("") }
+    var playlistForAction by remember { mutableStateOf<Playlist?>(null) }
 
-    // File Pickers (Keeping existing logic)
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-        onResult = { uri ->
-            uri?.let { viewModel.importPlaylistFromTxt(it) }
-        }
-    )
-    
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain"),
-        onResult = { uri ->
-            uri?.let { 
-                playlistToExportId?.let { id -> viewModel.exportPlaylistToTxt(id, it) }
-            }
-            isExportMode = false
-            playlistToExportId = null
-        }
-    )
-
-    // Root Box
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Main Content Layer
-        Box(
+    // Root Container
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding() // [FIX] Avoid status bar overlap
-                .padding(horizontal = 20.dp)
         ) {
-            Column {
-                // Header
-                com.vagueplayer.music.ui.components.ScreenHeader(
-                    title = if (isExportMode) "选择导出歌单" else "歌单",
-                    action = {
-                        Box {
-                            var localBtnPos by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-                            IconButton(
-                                onClick = { onShowAddMenu(localBtnPos) },
-                                modifier = Modifier.onGloballyPositioned { 
-                                    localBtnPos = it.boundsInWindow().topLeft
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Add",
-                                    tint = AccentBlue,
-                                    modifier = Modifier.size(28.dp)
-                                )
+            // Header with Manage/Add Actions
+            com.vagueplayer.music.ui.components.ScreenHeader(
+                title = "歌单",
+                action = {
+                    Box {
+                        var localBtnPos by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+                        
+                        // [FIX] Manage Toggle Removed
+                        
+                        // Add Button
+                        IconButton(
+                            onClick = { onShowAddMenu(localBtnPos) },
+                            modifier = Modifier.onGloballyPositioned { 
+                                localBtnPos = it.boundsInWindow().topLeft
                             }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add",
+                                tint = AccentBlue,
+                                modifier = Modifier.size(28.dp)
+                            )
                         }
                     }
-                )
+                }
+            )
 
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(15.dp),
-                    verticalArrangement = Arrangement.spacedBy(15.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp)
-                ) {
-                    items(playlists) { playlist ->
-                        val coverSong = viewModel.getMostPlayedSong(playlist)
-                        
-                        PlaylistCard(
-                            playlist = playlist,
-                            coverSong = coverSong,
-                            onClick = {
-                                if (isExportMode) {
-                                    playlistToExportId = playlist.id
-                                    exportLauncher.launch("${playlist.name}.txt")
-                                } else {
-                                    onPlaylistClick(playlist)
-                                }
-                            },
-                            onLongClick = {
-                                if (!isExportMode) {
-                                    playlistForAction = playlist
-                                    showDeleteDialog = true
-                                }
-                            },
-                            sharedTransitionScope = sharedTransitionScope,
-                            animatedVisibilityScope = animatedVisibilityScope
-                        )
-                    }
+            // Playlist Grid (New Design)
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(playlists, key = { it.id }) { playlist ->
+                    PlaylistCard(
+                        playlist = playlist,
+                        onClick = { 
+                            onPlaylistClick(playlist) 
+                        },
+                        onLongClick = {
+                             playlistForAction = playlist
+                             showDeleteDialog = true
+                        },
+                        animatedVisibilityScope = animatedVisibilityScope
+                    )
                 }
             }
         }
-    
+
         // Delete Dialog
         if (showDeleteDialog && playlistForAction != null) {
             com.vagueplayer.music.ui.components.GlassAlertDialog(
                 hazeState = hazeState,
                 title = "删除歌单",
-                description = "确定要删除歌单 '${playlistForAction!!.name}' 吗？此操作无法撤销。",
+                description = "确定要删除歌单 '${playlistForAction!!.name}' 吗？",
                 icon = Icons.Default.Delete,
                 confirmText = "删除",
                 onConfirm = {
@@ -196,128 +129,80 @@ fun PlaylistScreen(
                 onDismiss = { showDeleteDialog = false }
             )
         }
-
-        // Rename Dialog
-        if (showRenameDialog && playlistForAction != null) {
-            com.vagueplayer.music.ui.components.GlassInputDialog(
-                hazeState = hazeState,
-                title = "重命名歌单(Safe)",
-                initialValue = renameText,
-                icon = Icons.Default.Edit,
-                onConfirm = { newName ->
-                    if (newName.isNotBlank()) {
-                         playlistForAction?.let { viewModel.renamePlaylist(it.id, newName) }
-                    }
-                    showRenameDialog = false
-                },
-                onDismiss = { showRenameDialog = false }
-            )
-        }
     }
 }
-        
 
-
-@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class) // [FIX] Added ExpFoundation
 @Composable
-fun PlaylistCard(
+fun SharedTransitionScope.PlaylistCard(
     playlist: Playlist,
-    coverSong: Song?, // Passed from outside
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
-    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
-    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null
+    onLongClick: () -> Unit, // [NEW]
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
+    // Vertical Card Layout
     Column(
         modifier = Modifier
-            .width(160.dp)
-            .then(
-                 if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                     with(sharedTransitionScope) {
-                          Modifier.transformSource(
-                              key = "playlist_card_${playlist.id}",
-                              sharedTransitionScope = this,
-                              animatedVisibilityScope = animatedVisibilityScope,
-                                  renderInOverlay = true
-                          )
-                     }
-                 } else Modifier
-            )
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .combinedClickable(
+            .fillMaxWidth()
+            .combinedClickable( // [FIX] Use combinedClickable
                 onClick = onClick,
                 onLongClick = onLongClick
-            )
+             )
     ) {
-        // [SHARED ELEMENT SOURCE] Image
+        // 1. Container/Image Area
+        // In the Grid Design, the "Shared Container" is effectively the Image Area
+        // We wrap the image in a Box to hold the Delete Badge and apply the Container Transform
         Box(
             modifier = Modifier
                 .aspectRatio(1f)
+                .fillMaxWidth()
+                // Shared Bounds (Container Transform)
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp))
+                )
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.LightGray), // Fallback
-            contentAlignment = Alignment.Center
+                .background(Color.LightGray.copy(alpha = 0.2f)) // Subtle placeholder bg
         ) {
-
-            if (coverSong != null) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(coverSong.albumArtUri)
-                        .crossfade(true)
-                        // 🔥【改这里】用 ID 当做唯一身份证！
-                        .memoryCacheKey("cover_cache_${playlist.id}") 
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .then(
-                            if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                                with(sharedTransitionScope) {
-                                    Modifier.sharedElement(
-                                        state = rememberSharedContentState(key = "cover_${playlist.id}"), // 🔥 Matched Key
-                                        animatedVisibilityScope = animatedVisibilityScope
-                                    )
-                                }
-                            } else Modifier
-                        )
-                        .fillMaxSize()
-                )
-            } else {
-                // Empty State
-                Text(
-                    text = playlist.name.firstOrNull()?.toString() ?: "?",
-                    fontSize = 40.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Gray
-                )
-            }
+            // Shared Element (Image Flight)
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(playlist.songs.firstOrNull()?.albumArtUri)
+                    .crossfade(true)
+                    .memoryCacheKey("cover_${playlist.id}")
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .sharedElement(
+                        state = rememberSharedContentState(key = "image_${playlist.id}"),
+                        animatedVisibilityScope = animatedVisibilityScope
+                    )
+            )
         }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        // [SHARED ELEMENT SOURCE] Text
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 2. Text Info (Outside Shared Bounds for cleaner text fade)
         Text(
             text = playlist.name,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black.copy(alpha = 0.8f),
+            fontSize = 17.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
             maxLines = 1,
             modifier = Modifier
-                .then(
-                     if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                         with(sharedTransitionScope) {
-                             Modifier.sharedElement(
-                                 state = rememberSharedContentState(key = "playlist_title_${playlist.id}"),
-                                 animatedVisibilityScope = animatedVisibilityScope
-                             )
-                         }
-                     } else Modifier
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "title_${playlist.id}"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds() // [FIX] Added ()
                 )
         )
-        
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = if (coverSong != null) "主打: ${coverSong.title}" else "${playlist.songs.size} 首歌",
-            fontSize = 12.sp,
+            text = "${playlist.songs.size} 首歌曲", // Subtitle
+            fontSize = 14.sp,
             color = Color.Gray,
             maxLines = 1
         )

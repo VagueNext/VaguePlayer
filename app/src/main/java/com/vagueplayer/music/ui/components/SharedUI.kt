@@ -43,6 +43,7 @@ fun ScreenHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = 20.dp) // [FIX] Add standard horizontal padding
             .padding(top = 80.dp, bottom = 16.dp), // Standardized Position
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -50,7 +51,7 @@ fun ScreenHeader(
         // Main Title
         Text(
             text = title,
-            fontSize = 34.sp,
+            fontSize = 32.sp, // [FIX] Match Library (32sp)
             fontWeight = FontWeight.Bold,
             color = Color.Black
         )

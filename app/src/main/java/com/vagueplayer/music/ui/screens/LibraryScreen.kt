@@ -201,17 +201,28 @@ fun LibraryScreen(
             
             
             
-            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-                LazyColumn(
-                    state = listState,
-                    contentPadding = PaddingValues(
-                        bottom = 160.dp,
-                        // [RESIZE] Base padding reduced from 16.dp to 0.dp to fix "large gap"
-                        // Only add sidebar width (20.dp) compensation
-                        start = if (isSidebarLeft) 20.dp else 0.dp, 
-                        end = if (!isSidebarLeft) 20.dp else 0.dp
-                    )
-                ) {
+
+
+            // [NEW] Container for the List (White Sheet)
+            // Takes up remaining space
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                color = Color.White, // Pure White Card
+                // shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp), // [USER REQUEST] Removed rounded corners
+                tonalElevation = 0.dp // Flat
+            ) {
+                 Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(
+                            top = 16.dp, // Inner padding
+                            bottom = 160.dp,
+                            start = if (isSidebarLeft) 20.dp else 0.dp, 
+                            end = if (!isSidebarLeft) 20.dp else 0.dp
+                        )
+                    ) {
                     if (songs.isEmpty() && !isScanning) {
                          item {
                              Box(modifier = Modifier.fillParentMaxSize().height(200.dp), contentAlignment = Alignment.Center)  {
@@ -364,7 +375,8 @@ fun LibraryScreen(
                             .heightIn(max = 600.dp) // Maximize height for all letters
                     )
                 }
-            } // Close Inner Box (List + Sidebar)
+                } // Close Inner Box (List + Sidebar)
+            } // Close Surface (White Sheet)
             } // Close Column
         }
     

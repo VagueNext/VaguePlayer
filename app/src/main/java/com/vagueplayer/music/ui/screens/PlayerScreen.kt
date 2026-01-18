@@ -56,12 +56,26 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.vagueplayer.music.ui.theme.AccentBlue
@@ -199,10 +213,15 @@ fun PlayerScreen(
     // Lifted from local scope to support Ghost Track
     val currentProgress = if (isDragging) dragProgress else (if (duration > 0) progress / duration.toFloat() else 0f)
 
+    // [NEW] Ghost Layout State
+    var sliderLayoutCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Transparent) // [FIX] Transparent background to reveal underlying content
+            // .haze REMOVED (Reverting Crash)
+            .background(Color.Black) // [FIX] Black background safety net. If blur fails, at least text is visible.
             .graphicsLayer {
                 val scale = 1f - (backProgress * 0.1f)
                 scaleX = scale
@@ -221,7 +240,7 @@ fun PlayerScreen(
              modifier = Modifier
                  .fillMaxSize()
                  .onGloballyPositioned { containerPosition = it.positionInRoot() }
-                 .haze(state = finalHazeState) 
+                 .haze(state = finalHazeState) // [RESTORED] Haze Source on Background Only
         ) {
               // B. Album Art Overlay (Blurred)
               AsyncImage(
@@ -242,11 +261,13 @@ fun PlayerScreen(
              )
              // [RESTORED] Simple Haze Source (just Background)
              // Phantom layout removed as per user request to simplify.
+
+             // Ghost Layout Removed
         }
 
         // Foreground: Interactions & Controls
         Box(
-             modifier = Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
                         var accumulation = androidx.compose.ui.geometry.Offset.Zero
@@ -410,21 +431,26 @@ fun PlayerScreen(
                 )
             }
 
-                // 2. The Slider (Foreground: Thumb + Interaction)
+                // 2. The Slider (Interaction Controller - Invisible)
+                // We use this to capture Gestures and Layout Position.
+                // The actual Track is rendered in the Haze Source (Background).
+                // The actual Thumb is rendered in the Overlay.
                 GlassProgressSlider(
-                    value = if (isDragging) dragProgress else progress / duration.toFloat().coerceAtLeast(1f),
+                    value = if (isDragging) dragProgress else progress / duration.toFloat().coerceAtLeast(0f), 
                     onValueChange = { newPercent ->
                         isDragging = true
                         dragProgress = newPercent
                     },
                     onValueChangeFinished = {
                         isDragging = false
-        viewModel.seekTo((dragProgress * duration).toLong())
+                        viewModel.seekTo((dragProgress * duration).toLong())
                     },
-                    modifier = Modifier.padding(vertical = 8.dp),
+                    modifier = Modifier
+                        .padding(vertical = 8.dp)
+                        .height(30.dp),
                     isGlassEnabled = true,
                     hazeState = finalHazeState, 
-                    onInteractionChange = { isSliderInteracting = it }
+                    visible = true
                 )
             
             // 3. Portal Sink: Glass Thumb Overlay
@@ -712,5 +738,7 @@ fun PlayerScreen(
                 hazeState = finalHazeState
             )
         }
+
+        // Ghost Thumb Removed
     } // End Root Box
 }

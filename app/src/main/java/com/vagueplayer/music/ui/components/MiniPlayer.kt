@@ -153,7 +153,7 @@ fun MiniPlayer(
 
                 Box(
                     modifier = Modifier
-                        .padding(start = 3.dp) // [USER REQUEST] Shift right 2dp (Total 3dp)
+                        .padding(start = 4.dp) // [USER REQUEST] Shift right 1dp (Total 4dp)
                         .then(sharedModifier) // Apply shared element here
                         .size(28.dp) // [RESIZE] User requested 28dp
                         .clip(RoundedCornerShape(8.dp))
