@@ -1302,7 +1302,7 @@ fun MainScreen() {
             exit = androidx.compose.animation.ExitTransition.None,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .zIndex(2000f)
+                .zIndex(100f) // [FIX] Lower than Dialogs (200f) but above content
         ) {
              Box(
                  modifier = Modifier
