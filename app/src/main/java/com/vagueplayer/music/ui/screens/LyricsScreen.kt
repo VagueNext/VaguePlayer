@@ -47,9 +47,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.vagueplayer.music.ui.components.GlassProgressSlider
-import com.vagueplayer.music.ui.components.waterDropGlass
 import com.vagueplayer.music.viewmodel.AudioViewModel
-import dev.chrisbanes.haze.HazeState
+
 
 /**
  * Lyrics Screen - Apple Music Style
@@ -59,8 +58,7 @@ import dev.chrisbanes.haze.HazeState
 fun LyricsScreen(
     viewModel: AudioViewModel,
     isVisible: Boolean,
-    onDismiss: () -> Unit,
-    hazeState: HazeState?
+    onDismiss: () -> Unit
 ) {
     if (!isVisible) return
     

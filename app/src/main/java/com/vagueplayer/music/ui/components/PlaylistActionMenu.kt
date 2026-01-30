@@ -21,25 +21,26 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.chrisbanes.haze.HazeState
 
 @Composable
 fun PlaylistActionMenu(
     isExpanded: Boolean,
     anchorSize: androidx.compose.ui.unit.DpSize, // Made required
     anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null, // [NEW] Unified Lens Support
+    hazeState: dev.chrisbanes.haze.HazeState? = null, // [FIX] Add Haze Support
     onAddPlaylist: () -> Unit,
     onImportPlaylist: () -> Unit,
     onExportPlaylist: () -> Unit,
-    onDismiss: () -> Unit,
-    hazeState: HazeState? = null
+    onDismiss: () -> Unit
 ) {
     MorphingGlassMenu(
         isExpanded = isExpanded,
         anchorSize = anchorSize,
         anchorPosition = anchorPosition, // Forwarded
+        onLayoutCoordinates = onLayoutCoordinates, // Forwarded
+        hazeState = hazeState, // [FIX] Pass Haze State
         onDismiss = onDismiss,
-        hazeState = hazeState,
         expandUp = false // Default
     ) {
         // Content
@@ -81,7 +82,10 @@ private fun MenuItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .clickable { onClick() }
+            .bouncyClickable(
+                targetScale = 0.98f,
+                onClick = onClick
+            )
             .padding(vertical = 10.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

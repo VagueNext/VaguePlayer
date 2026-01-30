@@ -1,5 +1,10 @@
 package com.vagueplayer.music.ui.components
 
+import dev.chrisbanes.haze.hazeChild
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,18 +43,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vagueplayer.music.ui.theme.AccentBlue
 import com.vagueplayer.music.viewmodel.AudioViewModel
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.haze
-import dev.chrisbanes.haze.hazeChild
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.shadow
 
 @Composable
 fun GlassPlaylistOverlay(
     viewModel: AudioViewModel,
     isVisible: Boolean,
     onDismiss: () -> Unit,
-    hazeState: HazeState? = null,
     blurRadius: androidx.compose.ui.unit.Dp = LiquidGlassDefaults.BlurRadius,
     tint: androidx.compose.ui.graphics.Color = LiquidGlassDefaults.Tint,
     edgeWidth: Float = LiquidGlassDefaults.EdgeWidth,
@@ -57,7 +59,8 @@ fun GlassPlaylistOverlay(
     songsToAdd: List<com.vagueplayer.music.data.model.Song> = emptyList(),
     customListMode: Boolean = false, // [NEW]
     customSongs: List<com.vagueplayer.music.data.model.Song> = emptyList(), // [NEW]
-    customTitle: String? = null // [NEW]
+    customTitle: String? = null, // [NEW]
+    hazeState: dev.chrisbanes.haze.HazeState? = null // [FIX] Add Haze
 ) {
     val currentQueue by viewModel.currentQueue.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
@@ -92,14 +95,26 @@ fun GlassPlaylistOverlay(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.6f)
-                    .waterDropGlass(
-                        hazeState = hazeState,
-                        cornerRadius = 24.dp,
-                        blurRadius = blurRadius,
-                        edgeWidth = edgeWidth,
-                        distortionStrength = LiquidGlassDefaults.DistortionStrength, // [UNIFORM] Standard Strength
-                        tint = tint
+                    .fillMaxHeight(0.5f) // Exactly lower half of screen
+                    .then(
+                        if (hazeState != null) {
+                            Modifier
+                                .clip(RoundedCornerShape(24.dp))
+                                .hazeChild(
+                                    state = hazeState, 
+                                    style = HazeStyle(
+                                        blurRadius = 30.dp,
+                                        tint = HazeTint(Color.White.copy(alpha = 0.5f)), // Stronger tint for overlay
+                                        noiseFactor = 0.05f
+                                    )
+                                )
+                        } else {
+                             Modifier.simpleGlass(
+                                 cornerRadius = 24.dp,
+                                 distortionStrength = 60f, // Increased for visibility
+                                 edgeWidth = 40f // Increased for visibility
+                             )
+                        }
                     )
                     .clickable(enabled = false) {}
             ) {

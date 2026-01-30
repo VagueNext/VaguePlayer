@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -61,9 +62,15 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation("androidx.compose.material:material") // For PullRefresh
     implementation(libs.androidx.compose.material.icons.extended)
-    implementation("dev.chrisbanes.haze:haze:1.0.1")
+
+    // Room Database
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.belerweb:pinyin4j:2.5.1") // Pinyin conversion
+    implementation(libs.haze) // Background blur
 
 
     testImplementation(libs.junit)

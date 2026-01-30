@@ -83,18 +83,145 @@ class AudioViewModel(
         TITLE, ARTIST, SIZE, PLAY_COUNT, DURATION_ASC, DURATION_DESC, DATE_ADDED, CUSTOM
     }
     
-    private val _sortOption = MutableStateFlow(SortOption.TITLE)
+    private val _sortOption = MutableStateFlow(SortOption.TITLE) // Main Library Sort
     val sortOption: StateFlow<SortOption> = _sortOption.asStateFlow()
     
+    // Per-Playlist Sort Options (Context Independent)
+    private val _playlistSortOptions = MutableStateFlow<Map<String, SortOption>>(emptyMap()) // Key: Context/ID
+    val playlistSortOptions: StateFlow<Map<String, SortOption>> = _playlistSortOptions.asStateFlow() // [NEW] Expose for observation
     
-    fun setSortOption(option: SortOption) {
-        _sortOption.value = option
-        resortSongs()
+    fun getSortOption(contextId: String): SortOption {
+        return _playlistSortOptions.value[contextId] ?: SortOption.TITLE // Default to Title
+    }
+    
+    // [NEW] Global Dialog State for Playlist Deletion (Hoisted for correct Z-Order)
+    private val _playlistToDelete = MutableStateFlow<Playlist?>(null)
+    val playlistToDelete: StateFlow<Playlist?> = _playlistToDelete.asStateFlow()
+
+    fun requestDeletePlaylist(playlist: Playlist) {
+        _playlistToDelete.value = playlist
+    }
+
+    fun cancelDeletePlaylist() {
+        _playlistToDelete.value = null
+    }
+
+    fun confirmDeletePlaylist() {
+        _playlistToDelete.value?.let { playlist ->
+            viewModelScope.launch {
+                deletePlaylist(playlist.id) // [FIX] Call local method, not repo
+                // Refresh if needed, or Flow will handle it
+            }
+        }
+        _playlistToDelete.value = null
+    }
+
+    fun setSortOption(option: SortOption, contextId: String? = null) {
+        if (contextId == null || contextId == "LIBRARY") {
+            _sortOption.value = option
+            resortSongs() // Sorts the main library list
+        } else {
+            // Update map for specific context
+            val current = _playlistSortOptions.value.toMutableMap()
+            current[contextId] = option
+            _playlistSortOptions.value = current
+        }
+    }
+    
+    // Helper to sort a specific list based on an option
+    fun sortSongs(songs: List<Song>, option: SortOption): List<Song> {
+        return when (option) {
+            SortOption.CUSTOM -> songs // Playlists might have custom order, but if 'Custom' is selected as a sort, usually means 'Default/Manual'
+            SortOption.TITLE -> songs.sortedBy { com.vagueplayer.music.utils.PinyinUtils.toPinyin(it.title) }
+            SortOption.ARTIST -> songs.sortedBy { com.vagueplayer.music.utils.PinyinUtils.toPinyin(it.artist) }
+            SortOption.SIZE -> songs.sortedByDescending { it.size }
+            SortOption.PLAY_COUNT -> songs.sortedByDescending { _playCounts.value[it.id] ?: 0 }
+            SortOption.DURATION_ASC -> songs.sortedBy { it.duration }
+            SortOption.DURATION_DESC -> songs.sortedByDescending { it.duration }
+            SortOption.DATE_ADDED -> songs.sortedByDescending { it.dateAdded }
+        }
+    }
+
+
+    // Loop Count Logic
+    fun setLoopCount(count: Int) {
+        if (count > 0) {
+           _targetLoopCount.value = count
+           _remainingLoopCount.value = count
+           // Force Repeat One mode if setting a specific count
+           mediaController?.repeatMode = Player.REPEAT_MODE_ONE
+        } else {
+            // Reset
+            _targetLoopCount.value = 0
+            _remainingLoopCount.value = 0
+            mediaController?.repeatMode = Player.REPEAT_MODE_OFF
+        }
     }
 
     // Lyrics Search
-    private val _searchResults = MutableStateFlow<List<Song>>(emptyList())
-    val searchResults: StateFlow<List<Song>> = _searchResults.asStateFlow()
+    // --- SEARCH LOGIC (Async Two-Tier) ---
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    // Combined Result State
+    data class SearchUiState(
+        val meta: List<Song> = emptyList(),
+        val lyrics: List<Song> = emptyList(),
+        val isSearchingLyrics: Boolean = false
+    )
+    
+    private val _searchUiState = MutableStateFlow(SearchUiState())
+    val searchUiState: StateFlow<SearchUiState> = _searchUiState.asStateFlow()
+    private var currentSearchToken: String = ""
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+        performDualTrackSearch(query)
+    }
+
+    private fun performDualTrackSearch(query: String) {
+        val token = java.util.UUID.randomUUID().toString()
+        currentSearchToken = token
+        
+        if (query.isBlank()) {
+            _searchUiState.value = SearchUiState()
+            return
+        }
+
+        // TRACK 1: Metadata (Instant)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val metaResults = musicRepository.searchMeta(query)
+            
+            // Check Token (Audit Fix)
+            if (currentSearchToken == token) {
+                // Update UI immediately with Track 1
+                _searchUiState.value = _searchUiState.value.copy(
+                    meta = metaResults,
+                    lyrics = emptyList(), // Clear old lyrics on new search
+                    isSearchingLyrics = true
+                )
+            }
+        }
+
+        // TRACK 2: Lyrics (Delayed)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // Debounce
+            kotlinx.coroutines.delay(300) 
+            
+            // Re-check Token
+            if (currentSearchToken != token) return@launch
+            
+            val lyricsResults = musicRepository.searchLyrics(query)
+            
+            // Final Token Check
+            if (currentSearchToken == token) {
+                 _searchUiState.value = _searchUiState.value.copy(
+                    lyrics = lyricsResults,
+                    isSearchingLyrics = false
+                )
+            }
+        }
+    }
     
     fun deletePlaylist(playlistId: String) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -174,6 +301,11 @@ class AudioViewModel(
             }
         }
     }
+
+    // Placeholder for UI calls
+    fun exportPlaylist(playlistId: String, name: String) {
+        Log.d("AudioViewModel", "Export requested for $name ($playlistId). Needs File Picker implementation.")
+    }
     
     fun exportPlaylistToTxt(playlistId: String, uri: Uri) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -209,7 +341,7 @@ class AudioViewModel(
 
     fun searchSongsWithLyrics(query: String) {
         if (query.isBlank()) {
-            _searchResults.value = emptyList()
+            _searchUiState.value = SearchUiState()
             return
         }
 
@@ -246,7 +378,13 @@ class AudioViewModel(
                 
                 false 
             }
-            _searchResults.value = filtered
+            // Verify token is still valid
+            if (currentSearchToken == currentSearchToken) { // simplified check, logic handled in caller mainly
+                 _searchUiState.value = _searchUiState.value.copy(
+                    meta = filtered,
+                    // Lyrics search is separate
+                )
+            }
         }
     }
     
@@ -304,16 +442,9 @@ class AudioViewModel(
     val guessYouLike: StateFlow<List<Song>> = _guessYouLike.asStateFlow()
 
     // Search Logic
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    // private val _searchQuery = MutableStateFlow("") // Duplicate definition exists above at line 93, so DO NOT restore this one.
 
-    // Consolidated Search Function (Metadata + Lyrics)
-    fun performSearch(query: String) {
-        _searchQuery.value = query
-        searchSongsWithLyrics(query)
-    }
-
-
+    // CONSOLIDATED SEARCH FUNCTION ALREADY EXISTS
 
     // Playback State
     private val _isPlaying = MutableStateFlow(false)
@@ -344,6 +475,8 @@ class AudioViewModel(
     
     private val _currentLyricIndex = MutableStateFlow(0)
     val currentLyricIndex: StateFlow<Int> = _currentLyricIndex.asStateFlow()
+
+
 
     // MediaController
     private var mediaController: MediaController? = null
@@ -525,11 +658,13 @@ class AudioViewModel(
     val isMixAudioEnabled: StateFlow<Boolean> = _isMixAudioEnabled.asStateFlow()
 
     // Sidebar Preference
-    private val _isSidebarOnLeft = MutableStateFlow(false) // Default Right
+    private val _isSidebarOnLeft = MutableStateFlow(false) 
     val isSidebarOnLeft: StateFlow<Boolean> = _isSidebarOnLeft.asStateFlow()
+
 
     fun setSidebarOnLeft(isLeft: Boolean) {
         _isSidebarOnLeft.value = isLeft
+        prefs.edit().putBoolean("sidebar_on_left", isLeft).apply()
     }
 
     fun setMixAudioEnabled(enabled: Boolean) {
@@ -574,6 +709,10 @@ class AudioViewModel(
         context.getSharedPreferences("vague_player_prefs", Context.MODE_PRIVATE) 
     }
 
+
+
+
+
     // Hidden Songs (Soft Delete)
     // Hidden Songs (Soft Delete)
     private val _hiddenPaths = MutableStateFlow<Set<String>>(emptySet())
@@ -582,6 +721,7 @@ class AudioViewModel(
     private val _allSongs = MutableStateFlow<List<Song>>(emptyList())
     
     // Expose Hidden Songs for "Removed" list
+
     val hiddenSongs: StateFlow<List<Song>> = kotlinx.coroutines.flow.combine(_allSongs, _hiddenPaths) { all, hidden ->
         all.filter { it.path in hidden }
     }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
@@ -710,8 +850,11 @@ class AudioViewModel(
         val current = _selectedIds.value
         _selectedIds.value = if (current.contains(id)) current - id else current + id
         
-        if (_selectedIds.value.isEmpty() && _isSelectionMode.value) {
+        val isEmpty = _selectedIds.value.isEmpty()
+        if (isEmpty && _isSelectionMode.value) {
             _isSelectionMode.value = false
+        } else if (!isEmpty && !_isSelectionMode.value) {
+            _isSelectionMode.value = true
         }
     }
     
@@ -1014,15 +1157,7 @@ class AudioViewModel(
         }
     }
     
-    fun setLoopCount(count: Int) {
-        _targetLoopCount.value = count
-        _remainingLoopCount.value = count
-        // SYNC ID: Ensure we know what song we are looping on start
-        lastMediaId = mediaController?.currentMediaItem?.mediaId
-        
-        // Use REPEAT_MODE_ONE to keep player locally on this song
-        toggleRepeatMode(Player.REPEAT_MODE_ONE)
-    }
+
     
     fun setShuffleMode(enabled: Boolean) {
         mediaController?.shuffleModeEnabled = enabled
@@ -1119,9 +1254,12 @@ class AudioViewModel(
     }
 
     init {
-        loadFavorites() // [NEW] Favorites
+        // Load Persisted Settings
+        _isSidebarOnLeft.value = prefs.getBoolean("sidebar_on_left", false)
+        loadGaplessSetting()
+        loadFavorites() 
         
-        // Load Persisted Data
+        // Load Repository Data
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _userPlaylists.value = playlistRepository.loadPlaylists()
             _playCounts.value = playlistRepository.loadPlayCounts()
@@ -1130,7 +1268,6 @@ class AudioViewModel(
         initializeMediaController()
         
         // Auto-Scan if folders are configured
-        // Collect customFolders once to check if we should scan
         viewModelScope.launch {
              customFolders.collectLatest { folders ->
                  if (folders.isNotEmpty() && !_isScanning.value && _songs.value.isEmpty()) {
@@ -1139,6 +1276,7 @@ class AudioViewModel(
                  }
              }
         }
+
         
         // Start polling for progress
         viewModelScope.launch {

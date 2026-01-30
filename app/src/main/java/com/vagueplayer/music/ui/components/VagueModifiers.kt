@@ -35,7 +35,24 @@ fun Modifier.bouncyClickable(
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ): Modifier = composed {
-    val interactionSource = remember { MutableInteractionSource() }
+    bouncyClickable(
+        interactionSource = remember { MutableInteractionSource() },
+        targetScale = targetScale,
+        onLongClick = onLongClick,
+        onClick = onClick
+    )
+}
+
+/**
+ * Overload allowing external InteractionSource hoisting
+ */
+@OptIn(ExperimentalFoundationApi::class)
+fun Modifier.bouncyClickable(
+    interactionSource: MutableInteractionSource,
+    targetScale: Float = 1.05f,
+    onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit
+): Modifier = composed {
     val isPressed by interactionSource.collectIsPressedAsState()
     
     // 使用统一的弹性形变系统

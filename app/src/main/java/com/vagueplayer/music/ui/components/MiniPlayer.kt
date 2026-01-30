@@ -7,13 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.Arrangement // [FIX] Missing import
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.MoreVert // [NEW]
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -37,17 +39,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.vagueplayer.music.viewmodel.AudioViewModel
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.hazeChild
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -66,12 +68,14 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 fun MiniPlayer(
     viewModel: AudioViewModel,
     modifier: Modifier = Modifier,
-    hazeState: HazeState? = null,
-    collapseProgress: Float = 0f, // [NEW] Controls animation
+    collapseProgress: Float = 0f, 
     onExpand: () -> Unit,
     onPlaylistClick: () -> Unit,
-    sharedTransitionScope: SharedTransitionScope? = null, // [NEW] Shared Element Scope
-    animatedVisibilityScope: AnimatedVisibilityScope? = null // [NEW] Visibility Scope
+    isSelectionMode: Boolean = false, // [NEW] Mode flag
+    selectedIds: Set<Long> = emptySet(), // [NEW] Added for selection status
+    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }, // [NEW] Updated Signature
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     val isPlaying by viewModel.isPlaying.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
@@ -86,22 +90,6 @@ fun MiniPlayer(
         }
     }
 
-    // Floating Capsule
-    // Using Surface for better shadow support
-// Simplified MiniPlayer for Split-Layer Architecture
-// Background is handled by parent (GooeyNavBarContainer Layer 1)
-// Function: Haze/Blur effect usually goes on TOP of background or ON the background.
-// Issue: If we remove Surface, we lose Haze?
-// Wait: GooeyNavBarContainer Layer 1 is WHITE. Liquid.
-// The reference image shows "Glassy" look. Glass usually means Background Blur (Haze) + Light/Reflection (Shader).
-// In Split-Layer: Layer 1 is the WHITE SHAPE (Liquid).
-// If we want Glass, we typically apply Haze to the SHAPE.
-// BUT our Shader is applied to the Shape.
-// The content (Text) is on top.
-// If we want the *entire capsule* to look like glass, the "White Shape" in Layer 1 is what gives it form.
-// So removing the Surface here is correct, because Layer 1 draws the capsule.
-// However, touch events (onClick) need to be preserved.
-
     Box(
         modifier = modifier
             .fillMaxWidth(), // [FIX] Removed clickable from parent (blocked by child draggable)
@@ -111,9 +99,9 @@ fun MiniPlayer(
         Box(
             modifier = Modifier
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .fillMaxSize()
-                .padding(horizontal = 8.dp) // [RESIZE] Reduced padding for more space
-                .clickable(onClick = onExpand) // [FIX] Clickable MUST be on the same node as draggable (or above it in modifier chain)
+                .fillMaxSize() // Already fills max size
+                .padding(horizontal = 4.dp) // [RESIZE] Even less padding
+                .clickable(onClick = onExpand) 
                 .draggable(
                     state = swipeableState,
                     orientation = Orientation.Horizontal,
@@ -135,6 +123,7 @@ fun MiniPlayer(
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
+                modifier = Modifier.fillMaxHeight(), // [FIX] Keep alignment fix
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Album Art / Icon [RESIZE]
@@ -153,10 +142,10 @@ fun MiniPlayer(
 
                 Box(
                     modifier = Modifier
-                        .padding(start = 4.dp) // [USER REQUEST] Shift right 1dp (Total 4dp)
-                        .then(sharedModifier) // Apply shared element here
-                        .size(28.dp) // [RESIZE] User requested 28dp
-                        .clip(RoundedCornerShape(8.dp))
+                        .padding(start = 8.dp) // [USER] Adjusted: 10dp -> 8dp
+                        .then(sharedModifier) 
+                        .size(28.dp) // [REVERT] Original 28dp
+                        .clip(RoundedCornerShape(8.dp)) // [REVERT] Original 8dp
                         .background(Color.LightGray)
                 ) {
                     AsyncImage(
@@ -172,25 +161,25 @@ fun MiniPlayer(
                 // Text [RESIZE]
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center // [FIX] Center vertically
+                    verticalArrangement = Arrangement.Center // [FIX] Revert alignment to Center as requested
                 ) {
                     Text(
                         text = currentSong?.title ?: "Not Playing",
-                        fontSize = 12.sp, // [RESIZE] Slightly smaller to fit
+                        fontSize = 14.sp, // [FIX] Bump font size slightly for readability
                         fontWeight = FontWeight.Bold,
                         color = Color.Black.copy(alpha = 0.8f), 
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, // [FIX] Ellipsis
-                        lineHeight = 14.sp, // [FIX] Tight line height
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        lineHeight = 16.sp,
                         modifier = Modifier
                     )
                     Text(
                         text = currentSong?.artist ?: "Vague Player",
-                        fontSize = 10.sp, // [RESIZE] Slightly smaller to fit
-                        color = Color.Black.copy(alpha = 0.5f), 
+                        fontSize = 10.sp, // [REVERT] Original 10sp
+                        color = Color.Black.copy(alpha = 0.5f), // [REVERT] Original 0.5f
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, // [FIX] Ellipsis
-                        lineHeight = 12.sp // [FIX] Tight line height
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        lineHeight = 12.sp // [REVERT] Original 12sp
                     )
                 }
 
@@ -203,23 +192,36 @@ fun MiniPlayer(
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = "Play/Pause",
-                        tint = Color.Black, // Black transparent style
-                        modifier = Modifier.size(26.dp) 
+                        tint = Color.Black, // [REVERT] Original Black
+                        modifier = Modifier.size(26.dp) // [REVERT] Original 26dp
                     )
                 }
                 
                 // Playlist Button [ANIMATION] Fade out during collapse
                 val playlistAlpha = (1f - collapseProgress * 5).coerceIn(0f, 1f)
                 if (playlistAlpha > 0f) {
+                    var menuButtonAnchor by remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
                     IconButton(
-                        onClick = { onPlaylistClick() },
-                        modifier = Modifier.size(32.dp) // [RESIZE] Compact button
+                        onClick = { 
+                            if (isSelectionMode) {
+                                currentSong?.let { onSongMenuRequest(it, menuButtonAnchor, androidx.compose.ui.unit.DpSize(32.dp, 32.dp)) }
+                            } else {
+                                onPlaylistClick() 
+                            }
+                        },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .onGloballyPositioned {
+                                val bounds = it.boundsInRoot()
+                                menuButtonAnchor = androidx.compose.ui.geometry.Offset(bounds.left, bounds.bottom)
+                            }
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
+                            // [FIX] Show MoreVert (Three Dots) in Selection Mode as requested
+                            imageVector = if (isSelectionMode) Icons.Default.MoreVert else Icons.AutoMirrored.Filled.List,
                             contentDescription = "Playlist",
                             tint = Color.Black.copy(alpha = 0.8f * playlistAlpha),
-                            modifier = Modifier.size(20.dp) // [RESIZE]
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

@@ -3,7 +3,13 @@ package com.vagueplayer.music.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import com.vagueplayer.music.ui.theme.AccentBlue
 import androidx.compose.foundation.border // [FIX] Added missing import
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeChild
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +26,9 @@ import androidx.compose.material3.SwipeToDismissBox // [NEW]
 import androidx.compose.material3.SwipeToDismissBoxValue // [NEW]
 import androidx.compose.material3.rememberSwipeToDismissBoxState // [NEW]
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,17 +50,18 @@ import com.vagueplayer.music.viewmodel.AudioViewModel
 import com.vagueplayer.music.viewmodel.AudioViewModelFactory
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import com.vagueplayer.music.ui.components.waterDropGlass
-import dev.chrisbanes.haze.HazeState
+
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch // [FIX] Required for scrolling
 import androidx.compose.ui.geometry.Offset // [FIX] Added missing import
+import com.vagueplayer.music.ui.components.simpleGlass // [FIX] Import
 
 @OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
-    hazeState: HazeState? = null,
-    onShowSortOptions: (Offset) -> Unit // [NEW] Hoisted Callback
+    onShowSortOptions: (Offset) -> Unit, // [NEW] Hoisted Callback
+    hazeState: HazeState? = null, // [NEW] Global Haze State from MainScreen
+    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> } // [NEW] Add this
 ) {
     // [FIX] Define Local State for Button Position
     var sortButtonPosition by remember { mutableStateOf(Offset.Zero) }
@@ -100,30 +110,164 @@ fun LibraryScreen(
         }
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pullRefresh(pullRefreshState)
-    ) {
-        // CONTENT LAYER (Blurred when Dialog is open)
+    // Scroll State
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    // [FIX] Use Global HazeState if provided to ensure sync with MainScreen.
+    // Fallback to local state ONLY if null (e.g. standard-alone preview)
+    val effectiveHazeState = hazeState ?: remember { HazeState() }
+    
+    // Calculate Header Alpha based on scroll
+    val scrollAlpha = remember {
+        derivedStateOf {
+            val firstVisibleItemIndex = listState.firstVisibleItemIndex
+            val firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset
+            
+            // Start fading in after 50dp scroll
+            val threshold = 50f
+            val scrollY = firstVisibleItemIndex * 80f + firstVisibleItemScrollOffset // Approximate item height
+            
+            (scrollY / threshold).coerceIn(0f, 1f)
+        }
+    }.value
+
+
+    Box(modifier = Modifier.fillMaxSize()) { // ROOT CONTAINER
+        // [FIX] SOURCE LAYER: Move Haze state to this dedicated sibling box
         Box(
-             modifier = Modifier
-                 .fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .haze(state = effectiveHazeState)
+                .pullRefresh(pullRefreshState)
         ) {
-            Column(
+        // [FIX] CONTENT LAYER: Directly inside SOURCE Box
+            // Note: Headers will be floating, so no static header here
+            // Sidebar State
+            val isSidebarLeft = viewModel.isSidebarOnLeft.collectAsState().value
+            val sidebarSections = remember { (listOf('#') + ('A'..'Z')).toList() }
+
+            // Container for the List (White Sheet)
+            // Takes up remaining space
+            Surface(
                 modifier = Modifier
-                    .fillMaxSize()
-                    // .padding(horizontal = 16.dp) REMOVED to allow Sidebar to reach edges
+                    .fillMaxSize(),
+                color = Color.White, // Pure White Card
+                // shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp), // [USER REQUEST] Removed rounded corners
+                tonalElevation = 0.dp // Flat
             ) {
+                 Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier, // Source moved to Surface wrapper
+                        state = listState,
+                        contentPadding = PaddingValues(
+                            top = 120.dp, // Space for floating header (96dp + gap)
+                            bottom = 160.dp,
+                            start = if (isSidebarLeft) 20.dp else 0.dp, 
+                            end = if (!isSidebarLeft) 20.dp else 0.dp
+                        )
+                    ) {
+                    if (songs.isEmpty() && !isScanning) {
+                         item {
+                             Box(modifier = Modifier.fillParentMaxSize().height(200.dp), contentAlignment = Alignment.Center)  {
+                                 Text("暂无音乐，下拉刷新或检查媒体来源设置", color = Color.Gray)
+                             }
+                         }
+                    }
+                    
+                    items(songs, key = { it.id }) { song ->
+                        SongItem(
+                            song = song,
+                            selectedIds = selectedIds,
+                            isSelectionMode = isSelectionMode,
+                            viewModel = viewModel,
+                            onClick = { s ->
+                                if (isSelectionMode) {
+                                    viewModel.toggleSelection(s.id)
+                                } else {
+                                    viewModel.playSong(s, songs, "所有歌曲")
+                                }
+                            },
+                            onLongClick = { s ->
+                                if (!isSelectionMode) {
+                                    viewModel.toggleSelection(s.id)
+                                }
+                            },
+                            onMenuClick = { s, offset ->
+                                onSongMenuRequest(s, offset, null) // Default size
+                            }
+                        )
+                        
+                        // Optional: Add Divider? (User didn't ask, but it's standard. Let's keep it clean/invisible for now like iOS)
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 82.dp, end = 16.dp),
+                            thickness = 0.5.dp,
+                            color = Color.Black.copy(alpha = 0.05f) 
+                        )
+                    }
+                }
+                
+                // Alphabet Sidebar
+                val sortOption by viewModel.sortOption.collectAsState()
+                
+                if (songs.isNotEmpty() && (sortOption == com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.TITLE || sortOption == com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.ARTIST)) {
+                    com.vagueplayer.music.ui.components.AlphabetSideBar(
+                        sections = sidebarSections,
+                        onLetterSelected = { letter ->
+                            // Find first song starting with this letter
+                            val targetIndex = songs.indexOfFirst { song ->
+                                val firstChar = song.title.firstOrNull()?.uppercaseChar()
+                                if (letter == '#') {
+                                    firstChar != null && !firstChar.isLetter()
+                                } else {
+                                    firstChar == letter
+                                }
+                            }
+                            if (targetIndex >= 0) {
+                                coroutineScope.launch {
+                                    listState.animateScrollToItem(targetIndex)
+                                }
+                            }
+                        },
+                        isOnLeft = isSidebarLeft,
+                        modifier = Modifier
+                            .align(if (isSidebarLeft) Alignment.CenterStart else Alignment.CenterEnd)
+                            .padding(
+                                start = if (isSidebarLeft) 8.dp else 0.dp,
+                                end = if (isSidebarLeft) 0.dp else 8.dp
+                            )
+                    )
+                }
+                } // Close Inner Box (List + Sidebar)
+            } // Close Surface (White Sheet)
+        } // [FIX] Close SOURCE LAYER (haze node) here to make headers siblings
 
-
-                // Header: Normal vs Selection Mode
-            if (isSelectionMode) {
-                 Row(
+        // Floating Headers (On Top of Content)
+        if (isSelectionMode) {
+            // Selection Mode Header
+            // Selection Mode Header with Blur
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .background(Color.White)
+                    .align(Alignment.TopCenter)
+                    .zIndex(1f) // [FIX] Ensure Header is above all content
+                    // [FIX] Apply Haze Blur to Selection Header
+                    .hazeChild(
+                        state = effectiveHazeState,
+                        style = HazeStyle(
+                            backgroundColor = Color.White.copy(alpha = 0.7f), 
+                            tint = dev.chrisbanes.haze.HazeTint(Color.White.copy(alpha = 0.2f)), 
+                            blurRadius = 30.dp, // [FIX] Match ScreenHeader (30dp)
+                            noiseFactor = 0f
+                        )
+                    )
+            ) {
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp) // ADDED padding
-                        .padding(top = 80.dp, bottom = 16.dp),
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -153,232 +297,32 @@ fun LibraryScreen(
                         }
                     )
                 }
-            } else {
-                // Custom Header with Right-Aligned Sort Menu
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 80.dp, bottom = 16.dp), // [RESTORE] Stable 80dp top padding
-                    horizontalArrangement = Arrangement.SpaceBetween, // Title Left, Button Right
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Title (Left)
-                    Text(
-                        text = "音乐库", 
-                        fontSize = 32.sp, 
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-
-                            // Sort Button (Right)
-                            IconButton(
-                                onClick = { 
-                                    onShowSortOptions(sortButtonPosition) // [NEW] Call hoisted state
-                                },
-                                modifier = Modifier.onGloballyPositioned { coordinates ->
-                                    sortButtonPosition = coordinates.boundsInWindow().topLeft
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
-                                    contentDescription = "Sort",
-                                    tint = Color.Black 
-                                )
-                            }
-
-
-                            } 
-                }
-
-            // Song List
-            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            val coroutineScope = rememberCoroutineScope()
-            
-            // Sidebar State
-            val isSidebarLeft = viewModel.isSidebarOnLeft.collectAsState().value
-            val sidebarSections = remember { (listOf('#') + ('A'..'Z')).toList() }
-            
-            
-            
-
-
-            // [NEW] Container for the List (White Sheet)
-            // Takes up remaining space
-            Surface(
+            }
+        } else {
+            // Normal Header with Blur
+            com.vagueplayer.music.ui.components.ScreenHeader(
+                title = "音乐库",
+                scrollAlpha = scrollAlpha,
+                hazeState = effectiveHazeState, // [FIX] Use effective state
                 modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                color = Color.White, // Pure White Card
-                // shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp), // [USER REQUEST] Removed rounded corners
-                tonalElevation = 0.dp // Flat
-            ) {
-                 Box(modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(
-                            top = 16.dp, // Inner padding
-                            bottom = 160.dp,
-                            start = if (isSidebarLeft) 20.dp else 0.dp, 
-                            end = if (!isSidebarLeft) 20.dp else 0.dp
-                        )
-                    ) {
-                    if (songs.isEmpty() && !isScanning) {
-                         item {
-                             Box(modifier = Modifier.fillParentMaxSize().height(200.dp), contentAlignment = Alignment.Center)  {
-                                 Text("暂无音乐，下拉刷新或检查媒体来源设置", color = Color.Gray)
-                             }
-                         }
-                    }
-                    
-                    items(songs) { song ->
-                        val isSelected = selectedIds.contains(song.id)
-                        
-                        // Swipe to Queue Action
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = { dismissValue ->
-                                if (dismissValue == SwipeToDismissBoxValue.StartToEnd) {
-                                    viewModel.addToNext(listOf(song))
-                                    return@rememberSwipeToDismissBoxState false // Don't dismiss, just trigger action
-                                }
-                                false
-                            }
-                        )
-
-                        SwipeToDismissBox(
-                            state = dismissState,
-                            backgroundContent = {
-                                val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) com.vagueplayer.music.ui.theme.AccentBlue else Color.Transparent
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(color)
-                                        .padding(horizontal = 12.dp), // [RESIZE] Reduced from 20dp
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.PlaylistPlay, 
-                                            contentDescription = "Play Next", 
-                                            tint = Color.White
-                                        )
-                                    }
-                                }
-                            },
-                            content = {
-                                // Flat List Style
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color.White) // Ensure opaque background for swipe
-                                        .combinedClickable(
-                                            onClick = { 
-                                                if (isSelectionMode) {
-                                                    viewModel.toggleSelection(song.id)
-                                                } else {
-                                                    viewModel.playSong(song, songs, "所有歌曲") 
-                                                }
-                                            },
-                                            onLongClick = {
-                                                if (!isSelectionMode) {
-                                                    viewModel.setSelectionMode(true)
-                                                    viewModel.toggleSelection(song.id)
-                                                }
-                                            }
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 8.dp), // [RESIZE] Reduced from 16dp to 8dp 
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // Album Art
-                                    AsyncImage(
-                                        model = song.albumArtUri,
-                                        contentDescription = "Album Art",
-                                        modifier = Modifier
-                                            .size(56.dp) 
-                                            .clip(RoundedCornerShape(8.dp)) 
-                                            .background(Color.Gray.copy(alpha = 0.3f)),
-                                        contentScale = ContentScale.Crop,
-                                        error = painterResource(id = android.R.drawable.ic_menu_crop) 
-                                    )
-
-                                    Spacer(modifier = Modifier.width(16.dp))
-
-                                    // Info
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = song.title,
-                                            fontSize = 17.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = if (isSelected && isSelectionMode) com.vagueplayer.music.ui.theme.AccentBlue else Color.Black,
-                                            maxLines = 1
-                                        )
-                                        Text(
-                                            text = song.artist,
-                                            fontSize = 14.sp,
-                                            color = Color.Gray, 
-                                            maxLines = 1
-                                        )
-                                    }
-
-                                    // Checkbox Only (Menu Removed)
-                                    if (isSelectionMode) {
-                                        RadioButton(
-                                            selected = isSelected,
-                                            onClick = { viewModel.toggleSelection(song.id) },
-                                            colors = RadioButtonDefaults.colors(
-                                                selectedColor = com.vagueplayer.music.ui.theme.AccentBlue,
-                                                unselectedColor = Color.Gray
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                        )
-                        
-                        // Optional: Add Divider? (User didn't ask, but it's standard. Let's keep it clean/invisible for now like iOS)
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 82.dp, end = 16.dp),
-                            thickness = 0.5.dp,
-                            color = Color.Black.copy(alpha = 0.05f) 
-                        )
-                    }
-                }
-                
-                // Alphabet Sidebar
-                if (songs.isNotEmpty()) {
-                    com.vagueplayer.music.ui.components.AlphabetSideBar(
-                        sections = sidebarSections,
-                        onLetterSelected = { char ->
-                            // Logic: Find first song starting with this char OR greater
-                            val targetIndex = if (char == '#') {
-                                0 // Top
-                            } else {
-                                // Find first song where the Pinyin Index matches the selected char OR is greater
-                                // "Greater" is needed if the exact letter doesn't exist (e.g. click 'Q', go to 'R')
-                                songs.indexOfFirst { song ->
-                                    val indexLetter = com.vagueplayer.music.utils.PinyinUtils.getIndexLetter(song.title)
-                                    if (indexLetter == '#') false // Skip symbols when looking for letters
-                                    else if (indexLetter in 'A'..'Z') indexLetter >= char
-                                    else false
-                                }
-                            }
-                            
-                            if (targetIndex != -1) {
-                                coroutineScope.launch {
-                                    listState.scrollToItem(targetIndex)
-                                }
-                            }
-                        },
+                    .align(Alignment.TopCenter)
+                    .zIndex(1f),
+                action = {
+                    com.vagueplayer.music.ui.components.GlassIconButton(
+                        onClick = { onShowSortOptions(sortButtonPosition) },
+                        icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
+                        contentDescription = "Sort",
+                        tint = Color.Black,
+                        glassTint = Color.White.copy(alpha = 0.2f), // [FIX] Visible glass background
                         modifier = Modifier
-                            .align(if (isSidebarLeft) Alignment.TopStart else Alignment.TopEnd) // visual Up
-                            .padding(top = 80.dp, bottom = 0.dp) // Align EXACTLY with Header Top (80dp)
-                            .heightIn(max = 600.dp) // Maximize height for all letters
+                            .onGloballyPositioned { coordinates ->
+                                sortButtonPosition = coordinates.boundsInWindow().topLeft
+                            }
                     )
                 }
-                } // Close Inner Box (List + Sidebar)
-            } // Close Surface (White Sheet)
-            } // Close Column
+            )
         }
+    
     
     // OVERLAY LAYER - Real Glass Dropdown (Custom Implementation)
     // OVERLAY LAYER - Morphing Glass Menu (Hoisted)

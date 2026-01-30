@@ -82,11 +82,11 @@ object AnimationSpecs {
     /** 标准形变 - 适度回弹 */
     val ElasticStandard: SpringSpec<Float> = spring(dampingRatio = 0.6f, stiffness = 500f)
     
-    /** 快速形变 - 干脆利落 */
-    val ElasticSnappy: SpringSpec<Float> = spring(dampingRatio = 0.7f, stiffness = 800f)
+    /** 快速形变 - 干脆利落 (优化: 降低刚度，更流畅) */
+    val ElasticSnappy: SpringSpec<Float> = spring(dampingRatio = 0.75f, stiffness = 600f)
     
-    /** 果冻形变 - 液态回弹 */
-    val ElasticJelly: SpringSpec<Float> = spring(dampingRatio = 0.45f, stiffness = 400f)
+    /** 果冻形变 - 液态回弹 (优化: 更柔和的回弹) */
+    val ElasticJelly: SpringSpec<Float> = spring(dampingRatio = 0.55f, stiffness = 380f)
     
     /** 重物形变 - 慢速惯性 */
     val ElasticHeavy: SpringSpec<Float> = spring(dampingRatio = 0.8f, stiffness = 300f)

@@ -1,6 +1,12 @@
 package com.vagueplayer.music.ui.components
 
+import dev.chrisbanes.haze.hazeChild
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+
+ 
 import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -8,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onGloballyPositioned // [FIX] Required for Lens System
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
@@ -15,10 +22,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import dev.chrisbanes.haze.HazeState
 import kotlin.math.roundToInt
 
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 
 @Composable
 fun MorphingGlassMenu(
@@ -26,11 +35,12 @@ fun MorphingGlassMenu(
     onDismiss: () -> Unit,
     anchorSize: DpSize, // Made required/non-nullable for clarity
     anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
-    expandUp: Boolean = false, 
-    hazeState: HazeState? = null,
+    expandUp: Boolean = false,
+    hazeState: dev.chrisbanes.haze.HazeState? = null, // [FIX] Add Haze Support
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null, // [NEW] For Lens System
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // 1. Animation State
+
     // We drive the transition with the external isExpanded state directly
     var targetSize by remember { mutableStateOf(Size.Zero) }
 
@@ -86,11 +96,13 @@ fun MorphingGlassMenu(
     val targetY = if (expandUp) {
             anchorPosition.y - targetSize.height - gap
     } else {
-            anchorPosition.y + startHeight + gap
+            // [FIX] Align Top-Top for "Magnification" effect (Button morphs into Menu)
+            // Removed startHeight + gap offset to ensure start position covers the button exactly
+            anchorPosition.y 
     }
 
     // Spring Config
-    val popSpring = spring<Float>(dampingRatio = 0.75f, stiffness = 350f)
+    val popSpring = spring<Float>(dampingRatio = 0.82f, stiffness = 250f)
 
     // Animated Values
     // When closing (transition.targetState == false && transition.currentState == true),
@@ -160,15 +172,32 @@ fun MorphingGlassMenu(
             modifier = Modifier
                 // Apply Global Offset
                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                .graphicsLayer { alpha = menuAlpha } // [NEW] Fade In/Out Container
-                .waterDropGlass(
-                    hazeState = hazeState,
-                    cornerRadius = with(density) { cornerRadius.toDp() },
-                    blurRadius = 40.dp,
-                    edgeWidth = 8.0f,
-                    distortionStrength = 8.0f,
-                    tint = Color.White.copy(alpha = 0.15f),
-                    enableShader = true
+                .graphicsLayer { alpha = menuAlpha } // Fade In/Out Container
+                // [FIX] Report coordinates for Global Lens System
+                // Only report when expanded and effectively visible to avoid ghost frames
+                .onGloballyPositioned { coords ->
+                    if (isExpanded && menuAlpha > 0.05f) {
+                        onLayoutCoordinates?.invoke(coords)
+                    }
+                }
+                .then(
+                    if (hazeState != null) {
+                         Modifier
+                            .clip(RoundedCornerShape(with(density) { cornerRadius.toDp() }))
+                            .hazeChild(
+                                state = hazeState, 
+                                style = HazeStyle(
+                                    blurRadius = 20.dp,
+                                    tint = HazeTint(Color.White.copy(alpha = 0.4f)),
+                                    noiseFactor = 0.05f
+                                )
+                            )
+                    } else {
+                         Modifier.simpleGlass(
+                             cornerRadius = with(density) { cornerRadius.toDp() },
+                             distortionStrength = 30f 
+                        )
+                    }
                 )
         ) { measurables, _ ->
             // Measure naturally

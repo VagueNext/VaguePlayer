@@ -1,5 +1,10 @@
 ﻿package com.vagueplayer.music.ui.screens
 
+import androidx.media3.common.Player
+import com.vagueplayer.music.ui.components.liquidGlassLens
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -81,17 +86,11 @@ import coil.request.ImageRequest
 import com.vagueplayer.music.ui.theme.AccentBlue
 import com.vagueplayer.music.ui.components.GlassProgressSlider
 import com.vagueplayer.music.ui.components.GlassDialog 
-import com.vagueplayer.music.ui.components.waterDropGlass
+
 import com.vagueplayer.music.ui.components.bouncyClickable
 import com.vagueplayer.music.ui.components.RoundedRepeatIcon
 import com.vagueplayer.music.ui.components.RoundedShuffleIcon
 import com.vagueplayer.music.viewmodel.AudioViewModel
-import androidx.media3.common.Player
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.haze
-import kotlin.math.roundToInt
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.ui.draw.scale
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -119,7 +118,6 @@ fun PlayerScreen(
     onDismiss: () -> Unit,
     onTogglePlaylist: () -> Unit,
     onShowRepeatMenu: (androidx.compose.ui.geometry.Offset) -> Unit, // [NEW] Hoisted
-    hazeState: HazeState? = null,
     isOverlayVisible: Boolean = false, // [FIX] New Param to disable back handler
     sharedTransitionScope: SharedTransitionScope? = null, // [NEW] Shared Element Scope
     animatedVisibilityScope: AnimatedVisibilityScope? = null // [NEW] Visibility Scope
@@ -141,15 +139,17 @@ fun PlayerScreen(
     
     // [FIX] Capture Repeat Button Position (Hoisted for Overlay)
     var repeatButtonPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    
+
     // Bounds for Morphing Menus
 
 
 
 
 
-    // Local HazeState (or Shared)
-    val finalHazeState = hazeState ?: remember { HazeState() }
+
+    // Local HazeState [RESTORED]
+    val hazeState = remember { HazeState() }
+
     
     // --- PORTAL STATE HOISTING START ---
     // 1. Progress State
@@ -194,7 +194,7 @@ fun PlayerScreen(
     var backProgress by remember { mutableFloatStateOf(0f) }
     
     // [NEW] Handle Back Press with Predictive Animation
-    androidx.activity.compose.PredictiveBackHandler { progress ->
+    androidx.activity.compose.PredictiveBackHandler(enabled = !isOverlayVisible) { progress ->
         try {
             progress.collect { event ->
                 backProgress = event.progress
@@ -206,22 +206,76 @@ fun PlayerScreen(
     }
 
     val context = LocalContext.current
+    val density = LocalDensity.current
 
     // --- LIQUID COLOR LOGIC REMOVED (White Background Only) ---
     
+    // [NEW] Shared Progress State for Dual Render
+    // Lifted from local scope to support Ghost Track
     // [NEW] Shared Progress State for Dual Render
     // Lifted from local scope to support Ghost Track
     val currentProgress = if (isDragging) dragProgress else (if (duration > 0) progress / duration.toFloat() else 0f)
 
     // [NEW] Ghost Layout State
     var sliderLayoutCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-
+    
+    // [NEW] Calculate Lens Bounds (Slider Position) for AGSL Shader
+    // We transform the slider coordinates to the Root Box space
+    // var containerPosition by remember { mutableStateOf(Offset.Zero) } // Already defined above
+    
+    val lensBounds: androidx.compose.ui.geometry.Rect? = remember(sliderLayoutCoordinates, containerPosition, currentProgress) {
+        if (sliderLayoutCoordinates?.isAttached == true && containerPosition != Offset.Zero) {
+            val sliderPos = sliderLayoutCoordinates!!.positionInRoot()
+            // Map to local container coordinates
+            val localOffset = sliderPos - containerPosition
+            val size = sliderLayoutCoordinates!!.size
+            
+            // Logic to find the THUMB position within the slider
+            // Thumb is 26.dp wide, 16.dp tall (horizontal pill)
+            // But we can just use the slider's reporting or calculate it.
+            // For now, let's assume the lens is the *entire slider area* or just the thumb?
+            // The user wants the THUMB to generally distort its background.
+            // Let's pass the Thumb Rect.
+            
+            // Reuse logic from Ghost Thumb calculation below for consistency
+            // Thumb dims
+            val thumbWidthPx = with(density) { 26.dp.toPx() }
+            val thumbHeightPx = with(density) { 16.dp.toPx() }
+            val trackWidthPx = size.width.toFloat()
+             
+            val thumbX = localOffset.x + (trackWidthPx * currentProgress) - (thumbWidthPx / 2f)
+            val thumbY = localOffset.y + (size.height / 2f) - (thumbHeightPx / 2f)
+            
+            androidx.compose.ui.geometry.Rect(
+                left = thumbX,
+                top = thumbY,
+                right = thumbX + thumbWidthPx,
+                bottom = thumbY + thumbHeightPx
+            )
+        } else {
+            null
+        }
+    }
+    
+    // Animation for Slider Distortion
+    // val isSliderInteracting = remember { mutableStateOf(false) } // State will be updated by callback - Already defined above
+    // We animate the distortion strength based on interaction
+    val lensDistortion by animateFloatAsState(
+        targetValue = if (isSliderInteracting) 65.0f else 50.0f,
+        label = "LensDist"
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // .haze REMOVED (Reverting Crash)
             .background(Color.Black) // [FIX] Black background safety net. If blur fails, at least text is visible.
+            .liquidGlassLens(
+                bounds1 = lensBounds,
+                cornerRadius = 8.dp, // Thumb Radius (16dp height / 2)
+                distortionStrength = lensDistortion,
+                edgeWidth = 12.0f,
+                aberrationStrength = 1.0f 
+            )
             .graphicsLayer {
                 val scale = 1f - (backProgress * 0.1f)
                 scaleX = scale
@@ -240,7 +294,8 @@ fun PlayerScreen(
              modifier = Modifier
                  .fillMaxSize()
                  .onGloballyPositioned { containerPosition = it.positionInRoot() }
-                 .haze(state = finalHazeState) // [RESTORED] Haze Source on Background Only
+                 .onGloballyPositioned { containerPosition = it.positionInRoot() }
+                 .haze(state = hazeState) // [RESTORED] Haze Source on Background Only
         ) {
               // B. Album Art Overlay (Blurred)
               AsyncImage(
@@ -436,7 +491,7 @@ fun PlayerScreen(
                 // The actual Track is rendered in the Haze Source (Background).
                 // The actual Thumb is rendered in the Overlay.
                 GlassProgressSlider(
-                    value = if (isDragging) dragProgress else progress / duration.toFloat().coerceAtLeast(0f), 
+                    value = if (isDragging) dragProgress else (if (duration > 0) progress / duration.toFloat() else 0f).coerceIn(0f, 1f),
                     onValueChange = { newPercent ->
                         isDragging = true
                         dragProgress = newPercent
@@ -449,7 +504,7 @@ fun PlayerScreen(
                         .padding(vertical = 8.dp)
                         .height(30.dp),
                     isGlassEnabled = true,
-                    hazeState = finalHazeState, 
+     
                     visible = true
                 )
             
@@ -672,7 +727,7 @@ fun PlayerScreen(
                 var text by remember { mutableStateOf("1") }
                 
                 GlassDialog(
-                    hazeState = finalHazeState, // [RESTORED]
+                    hazeState = hazeState, // [FIX] Added HazeState
                     onDismissRequest = { showLoopCountDialog = false },
                     icon = Icons.Default.RepeatOne,
                     title = "循环次数",
@@ -714,7 +769,7 @@ fun PlayerScreen(
                  val currentMin = if (remaining != null) kotlin.math.ceil(remaining!! / 60000.0).toInt() else null
                  
                  com.vagueplayer.music.ui.components.SleepTimerDialog(
-                     hazeState = finalHazeState,
+                     hazeState = hazeState, // [FIX] Added HazeState
                      currentTimerMin = currentMin,
                      onSetTimer = { min ->
                          viewModel.startSleepTimer(min ?: 0)
@@ -734,8 +789,7 @@ fun PlayerScreen(
             com.vagueplayer.music.ui.screens.LyricsScreen(
                 viewModel = viewModel,
                 isVisible = true,
-                onDismiss = { isLyricsVisible = false },
-                hazeState = finalHazeState
+                onDismiss = { isLyricsVisible = false }
             )
         }
 

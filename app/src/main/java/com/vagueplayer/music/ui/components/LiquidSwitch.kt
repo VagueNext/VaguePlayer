@@ -14,163 +14,149 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.util.lerp
+import androidx.compose.ui.unit.lerp
+import androidx.compose.ui.graphics.lerp
 import com.vagueplayer.music.ui.animation.AnimationSpecs
-import dev.chrisbanes.haze.haze
-import dev.chrisbanes.haze.HazeState
+import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
- * VaguePlayer Liquid Glass Switch
- * 使用统一的 AnimationSpecs.GlassDeformation 系统
+ * VaguePlayer Liquid Glass Switch (Refactored)
+ * 交互规格:
+ * 1. 点击时滑块变大，透明度降低 (变大破出距离是静止时的两倍).
+ * 2. 运动到最大时透明度最低，大小最大.
+ * 3. 运动结束后恢复原状.
  */
 @Composable
 fun LiquidSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    hazeState: HazeState? = null,
-    checkedTrackColor: Color = Color(0xFF34C759), // Apple Green
+    enabled: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
+    checkedTrackColor: Color = Color(0xFF34C759),
     uncheckedTrackColor: Color = Color(0xFFE9E9EA)
 ) {
-    // =========================================================================
-    // 统一动画规格 (Unified Animation Specs)
-    // =========================================================================
+    // 布局常量
+    val trackWidth = 60.dp // [USER] Wider track
+    val trackHeight = 32.dp 
+    val padding = 2.dp
     
-    // 位置动画 - 使用 ElasticSnappy (快速响应)
-    val positionSpec = AnimationSpecs.ElasticSnappy
+    // 动画状态
+    val switchProgress = remember { Animatable(if (checked) 1f else 0f) }
     
-    // 形变动画 - 使用 ElasticJelly (液态回弹)
-    val jellySpec = AnimationSpecs.ElasticJelly
+    // Internal source if not provided
+    val finalInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
     
-    // 颜色动画 - 使用 ColorSpring
-    val colorSpec = AnimationSpecs.ColorSpring
+    LaunchedEffect(checked) {
+        switchProgress.animateTo(
+            targetValue = if (checked) 1f else 0f,
+            animationSpec = spring(dampingRatio = 0.7f, stiffness = 300f)
+        )
+    }
 
-    // =========================================================================
-    // 动画状态 (Animated States)
-    // =========================================================================
+    val progress = switchProgress.value
     
-    // Track Color
-    val trackColor by animateColorAsState(
-        targetValue = if (checked) checkedTrackColor else uncheckedTrackColor,
-        animationSpec = colorSpec,
-        label = "TrackColor"
-    )
-
-    // Thumb Position
-    val alignmentBias by animateFloatAsState(
-        targetValue = if (checked) 1f else -1f,
-        animationSpec = positionSpec,
-        label = "ThumbAlign"
-    )
-
-    // Thumb Dimensions (Scaled for 38dp Root Height)
-    // Root: 40->38 (95%)
-    // Checked Width: 54->51, Height: 32->30
-    // Unchecked Width: 33->31, Height: 20->19
-    val thumbWidth by animateDpAsState(
-        targetValue = if (checked) 51.dp else 31.dp,
-        animationSpec = AnimationSpecs.DpSpring,
-        label = "ThumbWidth"
-    )
+    // 1. Interaction Factor (0 -> 1 -> 0)
+    // Peak at 0.5
+    val interactionFactor = sin(progress * PI).toFloat().coerceIn(0f, 1f)
     
-    val thumbHeight by animateDpAsState(
-        targetValue = if (checked) 30.dp else 19.dp,
-        animationSpec = spring(dampingRatio = 0.45f, stiffness = 400f), // Jelly
-        label = "ThumbHeight"
-    )
-
-    // Thumb Offset (Horizontal Overflow)
-    val thumbOffsetX by animateDpAsState(
-        targetValue = if (checked) 5.dp else 0.dp,
-        animationSpec = AnimationSpecs.DpSpring,
-        label = "ThumbOffset"
-    )
-
-    // Glass Properties (Synced with Unified Framework)
-    val edgeWidth by animateFloatAsState(
-        targetValue = if (checked) 25.0f else 0f, // [USER REQUEST] Increased distortion range
-        animationSpec = jellySpec,
-        label = "EdgeWidth"
-    )
+    // 2. Size Logic (Ellipse)
+    // Resting: Slightly wider than height (Ellipse)
+    val thumbHeightResting = trackHeight - (padding * 2) // 28dp
+    val thumbWidthResting = thumbHeightResting * 1.2f // 33.6dp (Ellipse)
     
-    val distortion by animateFloatAsState(
-        targetValue = if (checked) LiquidGlassDefaults.DistortionStrength else 0f, 
-        animationSpec = jellySpec,
-        label = "Distortion"
-    )
-
-    // Thumb Tint Animation (White -> Fully Transparent)
-    val thumbTint by animateColorAsState(
-        targetValue = if (checked) Color.White.copy(alpha = 0.0f) else Color.White,
-        animationSpec = colorSpec,
-        label = "ThumbTint"
-    )
-
-    // =========================================================================
-    // 布局 (Layout) - 38dp Height
-    // =========================================================================
+    // Growing logic (Aggressive Expansion for Overflow)
+    // [USER REQUEST] "Break out of box" -> Make it significantly larger than track
+    val widthMax = thumbWidthResting * 1.7f // Much wider
+    val heightMax = thumbHeightResting * 1.9f // Taller than track (32dp -> ~53dp)
     
-    val trackWidth = 57.dp // 60 * 0.95
-    val trackHeight = 21.dp // 22 * 0.95
-    val rootHeight = 38.dp // Requested Height 
-
-    val localHazeState = remember { HazeState() }
+    val currentWidth = lerp(thumbWidthResting, widthMax, interactionFactor)
+    val currentHeight = lerp(thumbHeightResting, heightMax, interactionFactor)
+    
+    // 3. Alpha Logic
+    val currentThumbAlpha = lerp(1f, 0.4f, interactionFactor)
+    
+    // 4. Track Color
+    val currentTrackColor = lerp(uncheckedTrackColor, checkedTrackColor, progress)
 
     Box(
         modifier = modifier
-            .size(width = trackWidth, height = rootHeight)
+            .size(width = trackWidth, height = trackHeight)
+            .graphicsLayer { clip = false } // [FIX] Allow thumb to expand beyond track limits
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = { onCheckedChange(!checked) }
-            ),
+                interactionSource = finalInteractionSource,
+                enabled = enabled
+            ) { onCheckedChange(!checked) },
         contentAlignment = Alignment.Center
     ) {
-        // Track Layer (Source for Glass)
+        // Track
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .haze(localHazeState), // Capture Track
-            contentAlignment = Alignment.Center
+                .clip(RoundedCornerShape(100))
+                .background(currentTrackColor)
+        )
+        
+        // Thumb Container
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize()
         ) {
+            // Move from Left Center to Right Center
+            // Left Center X: padding + widthResting/2 (visual center at rest)
+            // But since thumb is elliptic, let's anchor by CENTER.
+            
+            // Start State (Unchecked)
+            // CenterX should be such that Left Edge = padding
+            // CenterX_Start = padding + thumbWidthResting / 2
+            
+            // End State (Checked)
+            // CenterX_End = trackWidth - padding - thumbWidthResting / 2
+            
+            val combinedStartPadding = padding + (thumbWidthResting / 2)
+            val combinedEndPadding = trackWidth - padding - (thumbWidthResting / 2)
+            
+            val centerX = lerp(combinedStartPadding, combinedEndPadding, progress)
+            val centerY = trackHeight / 2 // Vertically centered
+            
+            // [FIX] Use requiredSize to bypass parent constraints and allow "breaking the frame"
+            // The parent BoxWithConstraints might clip if we don't handle alignment or overflow.
+            // We use a centered Box that is allowed to draw outside.
             Box(
                 modifier = Modifier
-                    .size(width = trackWidth, height = trackHeight)
-                    .clip(RoundedCornerShape(100))
-                    .background(trackColor)
-            )
-        }
-
-        // Thumb Layer (Glass Effect Ready)
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(BiasAlignment(horizontalBias = alignmentBias, verticalBias = 0f))
-                    .offset(x = thumbOffsetX)
+                    .align(Alignment.CenterStart) // Anchor start
+                    .graphicsLayer {
+                        translationX = centerX.toPx() - (currentWidth.toPx() / 2)
+                        // [FIX] Vertical Centering handled by Alignment.CenterStart
+                        // Previous manual calculation was adding an offset (centerY - height/2) which shifted it down.
+                        translationY = 0f
+                        
+                        // [CRITICAL] Disable clipping here too
+                        clip = false 
+                    }
+                    .requiredSize(width = currentWidth, height = currentHeight) // Force size, ignoring constraints
                     .zIndex(10f)
-                    .size(width = thumbWidth, height = thumbHeight)
-                    .shadow(
-                        elevation = if (checked) 8.dp else 2.dp,
-                        shape = CircleShape,
-                        spotColor = Color(0x20000000)
-                    )
-                    // Enable waterDropGlass for the thumb
-                    .waterDropGlass(
-                        hazeState = localHazeState, // Use Local Haze to refract Track 
-                        cornerRadius = thumbHeight / 2,
-                        blurRadius = 0.dp,
-                        tint = thumbTint, // Animated Tint
-                        edgeWidth = edgeWidth,
-                        distortionStrength = distortion,
-                        enableShader = true
-                    )
-            )
+            ) {
+                 Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                         // Ellipse Shape
+                        .shadow(elevation = 6.dp, shape = RoundedCornerShape(100), spotColor = Color.Black.copy(alpha = 0.15f))
+                        .clip(RoundedCornerShape(100))
+                        .background(Color.White.copy(alpha = currentThumbAlpha))
+                )
+            }
         }
     }
 }

@@ -24,10 +24,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.vagueplayer.music.ui.components.waterDropGlass
 import com.vagueplayer.music.ui.theme.AccentBlue
 import com.vagueplayer.music.viewmodel.AudioViewModel
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 
 @Composable
 fun FolderManagerScreen(
@@ -35,6 +35,9 @@ fun FolderManagerScreen(
     onBack: () -> Unit,
     hazeState: HazeState? = null
 ) {
+    // [FIX] Use LOCAL HazeState
+    val localHazeState = remember { HazeState() }
+    
     val context = LocalContext.current
     val customFolders by viewModel.customFolders.collectAsState()
 
@@ -54,138 +57,122 @@ fun FolderManagerScreen(
         }
     }
 
+    // Scroll State
+    val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scrollAlpha = remember {
+        derivedStateOf {
+            val firstVisibleItemIndex = scrollState.firstVisibleItemIndex
+            val firstVisibleItemScrollOffset = scrollState.firstVisibleItemScrollOffset
+            val scrollY = firstVisibleItemIndex * 100f + firstVisibleItemScrollOffset
+            (scrollY / 50f).coerceIn(0f, 1f)
+        }
+    }.value
+
+    // [FIX] Changed Column to Box to allow Floating Header overlay
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White) // consistent with Settings for now, or ensure MainScreen background shines through?
-            // User requested Glass UI. Let's make it a full glass overlay over the wallpaper?
-            // If MainScreen already has wallpaper, we can use a semi-transparent scrim or a blurred sheet.
-            // Let's stick to "Settings Style" (White) for consistency with the Transition, OR upgrade both.
-            // Given "Glass Tree/List" request, let's use a subtle gradient or dark glass if it fits the theme.
-            // For safety and consistency with current "Settings", let's use White but with Glass Cards.
-            // actually, user said "Continue existing Glass Morphism style", which usually means Dark/Transparent in this app.
-            // Let's try a Dark Glass Sheet.
             .background(Color.Black.copy(alpha = 0.5f)) 
     ) {
-        // Glass Sheet Background
-        Box(
+        // CONTENT LAYER
+        LazyColumn(
+            state = scrollState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 0.dp) // Full screen
-                // We could apply hazeChild here to blur everything behind
-                .waterDropGlass(hazeState, cornerRadius = 0.dp, tint = Color.Black.copy(alpha = 0.4f))
+                .haze(localHazeState), // [FIX] Mark as Haze Source
+            contentPadding = PaddingValues(top = 66.dp, bottom = 120.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                // Header
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 40.dp, bottom = 24.dp)
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
-                    }
-                    Text(
-                        "音乐文件夹",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
+            item {
+                Text(
+                    "自定义文件夹",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
 
-                // 1. System Library Toggle - REMOVED
-
-                // 2. Custom Folders Header + Add Button
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            items(customFolders) { folder ->
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        "自定义文件夹",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    IconButton(
-                        onClick = { launcher.launch(null) },
+                        Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White.copy(alpha = 0.1f))
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, "Add Folder", tint = Color.White)
+                        Icon(
+                            Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = AccentBlue,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                folder.displayName,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+                            Text(
+                                folder.fullPath,
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.5f),
+                                maxLines = 1
+                            )
+                        }
+                        IconButton(onClick = { viewModel.removeCustomFolder(folder.uri) }) {
+                            Icon(Icons.Default.Delete, "Remove", tint = Color.White.copy(alpha = 0.5f))
+                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 3. Folder List
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(customFolders) { folder ->
-                        GlassCard(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Folder,
-                                    contentDescription = null,
-                                    tint = AccentBlue,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        folder.displayName,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        folder.fullPath, // Or URI if path is empty
-                                        fontSize = 12.sp,
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        maxLines = 1
-                                    )
-                                }
-                                IconButton(onClick = { viewModel.removeCustomFolder(folder.uri) }) {
-                                    Icon(Icons.Default.Delete, "Remove", tint = Color.White.copy(alpha = 0.5f))
-                                }
-                            }
-                        }
+            }
+            
+            if (customFolders.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "没有自定义文件夹",
+                            color = Color.White.copy(alpha = 0.3f)
+                        )
                     }
-                    
-                    if (customFolders.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "没有自定义文件夹",
-                                    color = Color.White.copy(alpha = 0.3f)
-                                )
-                            }
-                        }
-                    }
-                    
-                    // Spacer for bottom nav
-                    item { Spacer(modifier = Modifier.height(100.dp)) }
                 }
             }
         }
+
+        // Floating Header
+        com.vagueplayer.music.ui.components.ScreenHeader(
+            title = "音乐文件夹",
+            scrollAlpha = scrollAlpha,
+            hazeState = localHazeState, // [FIX] Use local HazeState
+            contentColor = Color.White,
+            glassTint = Color.Black.copy(alpha = 0.5f),
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                }
+            },
+            action = {
+                IconButton(
+                    onClick = { launcher.launch(null) },
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = 0.1f))
+                ) {
+                    Icon(Icons.Default.Add, "Add Folder", tint = Color.White)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter) // [FIX] Updated for Box layout
+        )
     }
 }
 

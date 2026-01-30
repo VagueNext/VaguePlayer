@@ -8,17 +8,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex // [FIX] Added import
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asComposeRenderEffect // [FIX] Added import
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.chrisbanes.haze.HazeState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.ui.layout.onGloballyPositioned // [FIX] Added import
 import com.vagueplayer.music.ui.theme.AccentBlue
+import com.vagueplayer.music.ui.components.simpleGlass // [FIX] Import
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeChild
+import dev.chrisbanes.haze.HazeStyle
 
 /**
  * A reusable iOS-style Glass Dialog component.
@@ -26,11 +34,10 @@ import com.vagueplayer.music.ui.theme.AccentBlue
  */
 @Composable
 fun GlassDialog(
-    hazeState: HazeState?,
     blurRadius: androidx.compose.ui.unit.Dp = LiquidGlassDefaults.BlurRadius,
     tint: androidx.compose.ui.graphics.Color = LiquidGlassDefaults.Tint,
-    edgeWidth: Float = LiquidGlassDefaults.EdgeWidth,
-    enableShader: Boolean = true, 
+    enableShader: Boolean = true, // Kept for API compatibility, though shader unused
+    hazeState: HazeState? = null, // [NEW] HazeState for background blur
     onDismissRequest: () -> Unit,
     title: String,
     description: String? = null,
@@ -39,26 +46,42 @@ fun GlassDialog(
     confirmText: String? = "Confirm",
     onConfirm: (() -> Unit)? = null,
     cancelText: String? = "Cancel",
-    onCancel: () -> Unit = onDismissRequest
+    onCancel: () -> Unit = onDismissRequest,
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null // [NEW] Unified Lens Support
 ) {
-    // Fullscreen Dimmed Overlay (Separate Window Layer)
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false, // Full screen
-            decorFitsSystemWindows = false // Allow drawing behind bars
-        )
+    // [FIX] Inline Dialog to allow Glass Refraction (RenderEffect requires same Window)
+    androidx.activity.compose.BackHandler(onBack = onDismissRequest)
+
+    // [RESTORED] Use hazeChild to blur the background content from the global haze source
+    // The global .haze() in MainScreen provides the source content
+
+    Box(
+        modifier = Modifier
+            .zIndex(200f) // Ensure it sits above other content
+            .fillMaxSize()
+            .then(
+                if (hazeState != null) {
+                    Modifier.hazeChild(
+                        state = hazeState,
+                        style = HazeStyle(
+                            backgroundColor = Color.White,
+                            tint = dev.chrisbanes.haze.HazeTint(
+                                color = Color.Black.copy(alpha = 0.4f) // [FIX] 40% Tint on Background
+                            ),
+                            blurRadius = 10.dp, // [FIX] 10% Blur on Background
+                            noiseFactor = 0f
+                        )
+                    )
+                } else {
+                    Modifier.background(Color.Black.copy(alpha = 0.4f))
+                }
+            )
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null
+            ) { onDismissRequest() },
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Transparent) // [FIX] Removed black scrim
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null
-                ) { onDismissRequest() },
-            contentAlignment = Alignment.Center
-        ) {
             // The Glass Card
             Box(
                 modifier = Modifier
@@ -70,14 +93,11 @@ fun GlassDialog(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .waterDropGlass(
-                            hazeState = hazeState, 
+                        .onGloballyPositioned { onLayoutCoordinates?.invoke(it) } // [NEW] Report bounds
+                        .simpleGlass(
                             cornerRadius = 32.dp,
-                            blurRadius = blurRadius,
-                            edgeWidth = edgeWidth, 
-                            distortionStrength = if (enableShader) LiquidGlassDefaults.DistortionStrength else 0f, 
-                            tint = tint, 
-                            enableShader = enableShader
+                            distortionStrength = 40f, 
+                            edgeWidth = 5f // [FIX] Reduced edge width to prevent white rim
                         )
                 )
 
@@ -181,7 +201,6 @@ fun GlassDialog(
                 }
             }
         }
-    }
 }
 
 /**
@@ -190,11 +209,12 @@ fun GlassDialog(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SleepTimerDialog(
-    hazeState: HazeState?,
     currentTimerMin: Int?, 
+    hazeState: HazeState? = null, // [FIX] Added HazeState
     onSetTimer: (Int?) -> Unit,
     onDismiss: () -> Unit
 ) {
+
     // Options: 10, 15, 30
     val options = listOf(10, 15, 30)
     var customInput by remember { mutableStateOf(currentTimerMin?.toString() ?: "") }
@@ -203,7 +223,7 @@ fun SleepTimerDialog(
     val isTimerSet = customInput.toIntOrNull() != null && customInput.toIntOrNull()!! > 0
 
     GlassDialog(
-        hazeState = hazeState,
+        hazeState = hazeState, // [FIX] Pass HazeState
         title = "睡眠定时",
         description = "自动停止播放...",
         icon = Icons.Default.Timer,
@@ -321,24 +341,26 @@ fun FlowRow(
  */
 @Composable
 fun GlassAlertDialog(
-    hazeState: HazeState?,
     title: String,
     description: String,
     icon: ImageVector? = null,
     confirmText: String = "确定",
     cancelText: String = "取消",
+    hazeState: HazeState? = null, // [NEW] Haze support
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null // [NEW] Unified Lens Support
 ) {
     GlassDialog(
-        hazeState = hazeState,
         title = title,
         description = description,
         icon = icon,
         confirmText = confirmText,
         cancelText = cancelText,
+        hazeState = hazeState, // [NEW] Forward
         onConfirm = onConfirm,
-        onDismissRequest = onDismiss
+        onDismissRequest = onDismiss,
+        onLayoutCoordinates = onLayoutCoordinates // [NEW] Forward
     )
 }
 
@@ -347,7 +369,6 @@ fun GlassAlertDialog(
  */
 @Composable
 fun GlassInputDialog(
-    hazeState: HazeState?,
     title: String,
     description: String? = null,
     initialValue: String = "",
@@ -355,13 +376,14 @@ fun GlassInputDialog(
     icon: ImageVector? = null,
     confirmText: String = "保存",
     cancelText: String = "取消",
+    hazeState: HazeState? = null, // [FIX] Added HazeState
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var text by remember { mutableStateOf(initialValue) }
 
     GlassDialog(
-        hazeState = hazeState,
+        hazeState = hazeState, // [FIX] Pass HazeState
         title = title,
         description = description,
         icon = icon,

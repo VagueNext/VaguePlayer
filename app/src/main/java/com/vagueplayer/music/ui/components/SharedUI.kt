@@ -1,64 +1,180 @@
-package com.vagueplayer.music.ui.components
+ package com.vagueplayer.music.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background // [FIX] Added import
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment // [FIX] Restored import
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent // [FIX] Added import
+import androidx.compose.ui.draw.clip // [FIX] Added import
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.RenderEffect // [NEW] Added for Blur
+import androidx.compose.ui.graphics.asComposeRenderEffect // [NEW]
+import android.graphics.RenderEffect as nativeRenderEffect // [NEW]
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
+import com.vagueplayer.music.ui.animation.AnimationSpecs
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeChild
+import dev.chrisbanes.haze.HazeStyle
 
 // Moved from BottomNavBar.kt
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.ui.graphics.vector.ImageVector
 
+/**
+ * Standardized Glass Icon Button
+ * Default Size: 38dp (Matches sunken Search Orb)
+ * Default Style: Circular Glass with 100.dp corner radius
+ */
+@Composable
+fun GlassIconButton(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    tint: Color = Color.White,
+    glassTint: Color = LiquidGlassDefaults.Tint,
+    distortionStrength: Float = LiquidGlassDefaults.DistortionStrength,
+    edgeWidth: Float = LiquidGlassDefaults.EdgeWidth,
+    aberrationStrength: Float = 0f
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 1.1f else 1.0f, // [FIX] Subtle scale feedback
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 400f), // Snappier spring
+        label = "Button Scale"
+    )
+    
+    Box(
+        modifier = modifier
+            .size(38.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        // Glass Background (scales with parent)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .simpleGlass(
+                    cornerRadius = 100.dp,
+                    tint = glassTint,
+                    distortionStrength = distortionStrength,
+                    edgeWidth = edgeWidth,
+                    aberrationStrength = aberrationStrength
+                )
+        )
+
+        // Icon (scales with parent)
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint
+        )
+    }
+}
 
 /**
  * Standardized Header for all main screens (Library, Playlist, Profile, etc.)
- * Enforces consistent Top Padding (80dp) and Typography (34sp Bold).
+ * Enforces consistent Top Padding and Typography.
+ * Supports scroll-driven glass blur.
  */
 @Composable
 fun ScreenHeader(
     title: String,
     modifier: Modifier = Modifier,
+    scrollAlpha: Float = 0f, 
+    contentColor: Color = Color.Black, 
+    glassTint: Color = Color.White.copy(alpha = 0.4f), // [FIX] Reduced alpha to avoid "white block" look
+    hazeState: HazeState? = null, // [NEW] HazeState for background blur
+    navigationIcon: @Composable (() -> Unit)? = null, 
     action: @Composable (() -> Unit)? = null
 ) {
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp) // [FIX] Add standard horizontal padding
-            .padding(top = 80.dp, bottom = 16.dp), // Standardized Position
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            // [FIX] Decreased height to 96dp for a more compact top bar
+            .height(96.dp)
     ) {
-        // Main Title
-        Text(
-            text = title,
-            fontSize = 32.sp, // [FIX] Match Library (32sp)
-            fontWeight = FontWeight.Bold,
-            color = Color.Black
-        )
+        // [FIX] Background blur layer using hazeChild
+        if (scrollAlpha > 0.01f && hazeState != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { 
+                        alpha = scrollAlpha 
+                        // [FIX] Removed Offscreen strategy to prevent RenderThread SIGSEGV
+                    }
+                    .hazeChild(
+                        state = hazeState,
+                        style = HazeStyle(
+                            backgroundColor = Color.White.copy(alpha = 0.7f), // [FIX] Strong opacity for masking
+                            tint = dev.chrisbanes.haze.HazeTint(Color.White.copy(alpha = 0.2f)), 
+                            blurRadius = 30.dp, // [FIX] Balanced blur (Recursion fixed)
+                            noiseFactor = 0f // [FIX] Keep disabled for max performance
+                        )
+                    )
+            )
+        }
+        // Content Layer
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // [NEW] Navigation Icon (e.g. Back)
+            if (navigationIcon != null) {
+                navigationIcon()
+                Spacer(modifier = Modifier.width(12.dp))
+            }
 
-        // Optional Action Button (e.g. "Create", "Settings")
-        if (action != null) {
-            action()
+            // Main Title
+            Text(
+                text = title,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                color = contentColor,
+                modifier = Modifier.weight(1f) // Push action to the right
+            )
+
+            // Optional Action Button
+            if (action != null) {
+                action()
+            }
         }
     }
 }
@@ -287,4 +403,3 @@ val NavItems = listOf(
     NavItem("歌单", Icons.Default.LibraryMusic),
     NavItem("我的", Icons.Default.Person)
 )
-

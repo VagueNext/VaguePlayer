@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
-import dev.chrisbanes.haze.HazeState
 
 @Composable
 fun RepeatModeMenu(
@@ -32,18 +31,20 @@ fun RepeatModeMenu(
     onDismiss: () -> Unit,
     anchorSize: androidx.compose.ui.unit.DpSize, // Made required
     anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null, // [NEW] Unified Lens Support
+    hazeState: dev.chrisbanes.haze.HazeState? = null, // [FIX] Add Haze Support
     currentMode: Int,
     onModeSelected: (Int) -> Unit,
     onSetCount: () -> Unit,
-    hazeState: HazeState? = null
 ) {
     MorphingGlassMenu(
         isExpanded = isExpanded,
         onDismiss = onDismiss,
         anchorSize = anchorSize,
         anchorPosition = anchorPosition, // Forwarded
+        onLayoutCoordinates = onLayoutCoordinates, // Forwarded
+        hazeState = hazeState, // [FIX] Pass Haze State
         expandUp = true,
-        hazeState = hazeState
     ) {
         // Content
         Column(
@@ -113,7 +114,10 @@ private fun MenuItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .clickable { onClick() }
+            .bouncyClickable(
+                targetScale = 0.95f,
+                onClick = onClick
+            )
             .background(if (isSelected) Color.White.copy(alpha = 0.3f) else Color.Transparent) 
             .padding(vertical = 6.dp, horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
