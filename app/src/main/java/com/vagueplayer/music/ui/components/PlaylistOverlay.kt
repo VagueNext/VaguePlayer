@@ -82,8 +82,8 @@ fun GlassPlaylistOverlay(
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = slideInVertically { it } + fadeIn(),
-        exit = slideOutVertically { it } + fadeOut()
+        enter = slideInVertically { it },
+        exit = slideOutVertically { it }
     ) {
         Box(
             modifier = Modifier
@@ -96,27 +96,11 @@ fun GlassPlaylistOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(0.5f) // Exactly lower half of screen
-                    .then(
-                        if (hazeState != null) {
-                            Modifier
-                                .clip(RoundedCornerShape(24.dp))
-                                .hazeChild(
-                                    state = hazeState, 
-                                    style = HazeStyle(
-                                        backgroundColor = Color.White,
-                                        blurRadius = 30.dp,
-                                        tint = HazeTint(Color.White.copy(alpha = 0.5f)), // Stronger tint for overlay
-                                        noiseFactor = 0.05f
-                                    )
-                                )
-                        } else {
-                             Modifier.simpleGlass(
-                                 cornerRadius = 24.dp,
-                                 distortionStrength = 60f, // Increased for visibility
-                                 edgeWidth = 40f // Increased for visibility
-                             )
-                        }
-                    )
+                     .simpleGlass(
+                         cornerRadius = 24.dp,
+                         distortionStrength = 60f, // Increased for visibility
+                         edgeWidth = 40f // Increased for visibility
+                     )
                     .clickable(enabled = false) {}
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {

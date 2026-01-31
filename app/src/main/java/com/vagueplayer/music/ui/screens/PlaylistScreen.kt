@@ -31,10 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vagueplayer.music.viewmodel.AudioViewModelFactory
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -156,7 +153,7 @@ fun SharedTransitionScope.PlaylistCard(
                     sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
                     boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(ContentScale.FillWidth),
+                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
                     clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp))
                 )
                 .clip(RoundedCornerShape(16.dp))

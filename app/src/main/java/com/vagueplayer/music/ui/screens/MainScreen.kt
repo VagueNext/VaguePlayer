@@ -91,7 +91,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material3.Icon
+
 import androidx.compose.material3.IconButton
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
@@ -111,16 +111,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
+
+
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.foundation.lazy.LazyColumn
+
+
 import androidx.compose.foundation.lazy.items
 
-import com.vagueplayer.music.ui.animation.ExpandableContainer
-import com.vagueplayer.music.ui.animation.transformSource
+
+
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.activity.compose.BackHandler
@@ -856,7 +856,7 @@ fun MainScreen() {
             targetState = selectedPlaylist,
             transitionSpec = {
                 // Fade In/Out the page itself, Shared Bounds handles the geometry
-                 androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) togetherWith 
+                 androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) togetherWith
                  androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))
             },
             label = "PlaylistDetailTransition",
@@ -1482,29 +1482,22 @@ fun MainScreen() {
         showSortMenu = false
         overlayBounds = null
     }
+    BackHandler(enabled = showSongMenu) { 
+        showSongMenu = false
+        overlayBounds = null
+    }
     
     // Playlist Global Overlay (Highest Priority for Overlay Stack)
     // Moved here to ensure it closes BEFORE PlayerScreen if both are open.
-    androidx.compose.animation.AnimatedContent(
-        targetState = showPlaylistGlobal,
-        transitionSpec = {
-             (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) + 
-              androidx.compose.animation.slideInVertically { it / 2 }).togetherWith(
-                 androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300)) + 
-                 androidx.compose.animation.slideOutVertically { it / 2 }
-             )
-        },
-        label = "PlaylistOverlay",
-        modifier = Modifier.zIndex(140f) 
-    ) { isVisible ->
-        if (isVisible) {
-             com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
-                 viewModel = audioViewModel,
-                 isVisible = true, 
-                 onDismiss = { showPlaylistGlobal = false },
-                 hazeState = mainHazeState
-             )
-        }
+// Playlist Global Overlay (Highest Priority for Overlay Stack)
+    // Directly render; component handles internal AnimatedVisibility
+    if (showPlaylistGlobal) {
+        com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
+             viewModel = audioViewModel,
+             isVisible = true, 
+             onDismiss = { showPlaylistGlobal = false },
+             hazeState = mainHazeState
+        )
     }
     BackHandler(enabled = showPlaylistGlobal) { showPlaylistGlobal = false }
     } // End Root Box (contains both Haze Box and Dialog Layer as siblings)

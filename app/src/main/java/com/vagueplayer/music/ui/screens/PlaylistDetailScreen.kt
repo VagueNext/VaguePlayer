@@ -6,15 +6,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.core.graphics.drawable.toBitmap
+
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
+
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,18 +42,16 @@ import dev.chrisbanes.haze.haze
 import com.vagueplayer.music.data.model.Playlist
 import com.vagueplayer.music.viewmodel.AudioViewModel
 import kotlinx.coroutines.flow.collect
-import com.vagueplayer.music.ui.components.simpleGlass
+
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Check
+
 import androidx.compose.ui.layout.positionInWindow
-import com.vagueplayer.music.ui.components.liquidGlassLens
+
 import com.vagueplayer.music.ui.components.GlassIconButton
-import androidx.palette.graphics.Palette
-import android.graphics.Bitmap
-import androidx.core.graphics.drawable.toBitmap
+
 
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -158,7 +155,7 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                         sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
                         animatedVisibilityScope = animatedVisibilityScope,
                         boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                        resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(ContentScale.FillWidth)
+                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds
                     )
                     .background(MaterialTheme.colorScheme.background)
             )
@@ -166,18 +163,6 @@ fun SharedTransitionScope.PlaylistDetailScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .animateEnterExit(
-                         enter = slideInVertically { it / 4 } + fadeIn(),
-                         exit = fadeOut()
-                    )
-                    .liquidGlassLens(
-                        bounds1 = backButtonBounds,
-                        bounds2 = sortButtonBounds,
-                        bounds3 = menuBounds,
-                        distortionStrength = 45f,
-                        edgeWidth = 30f,
-                        tint = Color.White.copy(alpha = 0.05f)
-                    )
             ) {
                 androidx.compose.foundation.lazy.LazyColumn(
                     state = listState,
