@@ -2,19 +2,19 @@ package com.vagueplayer.music.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntOffsetAsState
-import androidx.compose.animation.core.tween // [FIX] Import tween
-import androidx.compose.foundation.interaction.MutableInteractionSource // [FIX] Added import
-import androidx.compose.foundation.interaction.collectIsPressedAsState // [FIX] Added import
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.border // [FIX] Added import
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment // [FIX] Restore Alignment
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer // [FIX] Re-add required import
-import androidx.compose.ui.layout.layout // [FIX] Add layout import
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -26,7 +26,7 @@ fun AnimatedGlassNavBar(
     selectedIndex: Int,
     onItemSelected: (Int) -> Unit,
     collapseProgress: Float = 0f,
-    expandedWidth: androidx.compose.ui.unit.Dp, // [NEW] Pass fixed width
+    expandedWidth: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier
 ) {
     // [LOGIC] Gradual Cover Animation
@@ -138,7 +138,7 @@ fun AnimatedGlassNavBar(
                             scaleY = indicatorScale
                             alpha = (1f - collapseProgress * 3).coerceIn(0f, 1f)
                         }
-                        // [FIX] Add subtle border for better "Active" feedback
+                        // Add subtle border for better "Active" feedback
                         .border(
                             width = 0.5.dp, 
                             color = Color.White.copy(alpha = 0.2f), 
@@ -146,7 +146,7 @@ fun AnimatedGlassNavBar(
                         )
                         .simpleGlass(
                             cornerRadius = 100.dp, 
-                            tint = Color.White.copy(alpha = 0.15f), // [FIX] Increased Visibility (0.1 -> 0.15)
+                            tint = Color.White.copy(alpha = 0.15f),
                             distortionStrength = 20f,
                             edgeWidth = 15f
                         )

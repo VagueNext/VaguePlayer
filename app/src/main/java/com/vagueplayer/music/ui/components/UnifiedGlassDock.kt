@@ -32,7 +32,7 @@ fun UnifiedGlassDock(
     blurRadius: Dp = LiquidGlassDefaults.BlurRadius,
     tint: Color = LiquidGlassDefaults.Tint,
     playerContent: @Composable () -> Unit,
-    navContent: @Composable (Dp) -> Unit, // [FIX] Pass expandedWidth to content
+    navContent: @Composable (Dp) -> Unit,
     searchContent: @Composable () -> Unit,
     onExpandPlayer: () -> Unit,
     onSearchClick: () -> Unit,
@@ -43,27 +43,27 @@ fun UnifiedGlassDock(
     onPlayerPositioned: (Rect) -> Unit = {},
     onNavPositioned: (Rect) -> Unit = {},
     onSearchPositioned: (Rect) -> Unit = {},
-    onExpandDock: () -> Unit = {}, // [NEW] Callback for expand click
-    showNavigation: Boolean = true // [NEW] Control bottom bar visibility
+    onExpandDock: () -> Unit = {},
+    showNavigation: Boolean = true
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(12.dp) // [FIX] Standardized Outer Padding (Was 8h/20v)
+            .padding(12.dp) // Standardized Outer Padding
             .navigationBarsPadding(),
         contentAlignment = Alignment.BottomCenter
     ) {
-        val maxWidth = availableWidth - 24.dp // [FIX] 12dp * 2 padding
+        val maxWidth = availableWidth - 24.dp
         
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp) // [FIX] Standardized Gap (Was 16dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
-            // [FIX] Direct calculation - collapseProgress is already animated by physics in MainScreen
+            // Direct calculation - collapseProgress is already animated by physics in MainScreen
             val playerPadding = (48.dp * collapseProgress).coerceAtLeast(0.dp)
-            val playerOffsetY = (50.dp * collapseProgress) // [FIX] 38dp (Height) + 12dp (Gap) = 50dp
+            val playerOffsetY = (50.dp * collapseProgress)
             
             // 1. Player Dock (Top Capsule)
             Box(
@@ -72,7 +72,7 @@ fun UnifiedGlassDock(
                 .offset(y = playerOffsetY) 
                 .padding(horizontal = playerPadding)
                 .height(38.dp)
-                .onGloballyPositioned { onPlayerPositioned(it.boundsInRoot()) } // [GLASS] Report Bounds
+                .onGloballyPositioned { onPlayerPositioned(it.boundsInRoot()) } // Report Bounds
                 .then(playerContainerModifier), 
             contentAlignment = Alignment.Center
             ) {
@@ -93,7 +93,7 @@ fun UnifiedGlassDock(
                 }
             }
 
-            // [ANIMATION] Dynamic Size for Dock Items (50dp -> 38dp)
+            // Dynamic Size for Dock Items (50dp -> 38dp)
             val dockItemSize = (50.dp * (1 - collapseProgress) + 38.dp * collapseProgress)
             val dockItemRadius = dockItemSize / 2
 
@@ -105,7 +105,7 @@ fun UnifiedGlassDock(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                // [FIX] Standardized Gap: 12dp
+                // Standardized Gap: 12dp
                 val expandedNavWidth = maxWidth - 12.dp - dockItemSize 
                 val collapsedNavWidth = 38.dp 
                 
@@ -117,7 +117,7 @@ fun UnifiedGlassDock(
                         .width(currentNavWidth) 
                         .height(dockItemSize) 
                         .align(Alignment.CenterVertically)
-                        .onGloballyPositioned { onNavPositioned(it.boundsInRoot()) }, // [GLASS] Report Bounds
+                        .onGloballyPositioned { onNavPositioned(it.boundsInRoot()) }, // Report Bounds
                     contentAlignment = Alignment.Center
                 ) {
                     // LAYER 1: GLASS BACKGROUND (Transparent now)
@@ -135,15 +135,14 @@ fun UnifiedGlassDock(
                             .clip(RoundedCornerShape(dockItemRadius)),
                         contentAlignment = Alignment.Center
                     ) {
-                        navContent(expandedNavWidth) // [FIX] expandedWidth is already Dp
+                        navContent(expandedNavWidth)
                         
-                        // [NEW] Click Interceptor for Expansion
+                        // Click Interceptor for Expansion
                         // When collapsed (progress > 0.5), intercept clicks to trigger expansion
                         if (collapseProgress > 0.1f) {
                              Box(
                                  modifier = Modifier
                                     .fillMaxSize()
-                                    // [FIX] Bouncy Expansion
                                     .bouncyClickable(
                                         targetScale = 0.95f,
                                         onClick = onExpandDock
@@ -158,8 +157,7 @@ fun UnifiedGlassDock(
                     modifier = Modifier
                         .size(dockItemSize)
                         .align(Alignment.CenterVertically)
-                        .onGloballyPositioned { onSearchPositioned(it.boundsInRoot()) } // [GLASS] Report Bounds
-                        // [FIX] Apply Bouncy Click HERE (Parent) so content scales too
+                        .onGloballyPositioned { onSearchPositioned(it.boundsInRoot()) } // Report Bounds
                         .bouncyClickable(
                             targetScale = 0.95f,
                             onClick = onSearchClick

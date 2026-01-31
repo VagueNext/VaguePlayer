@@ -4,7 +4,6 @@ import dev.chrisbanes.haze.hazeChild
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 
- 
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.*
@@ -14,7 +13,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.onGloballyPositioned // [FIX] Required for Lens System
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
@@ -33,11 +32,11 @@ import androidx.compose.ui.draw.clip
 fun MorphingGlassMenu(
     isExpanded: Boolean,
     onDismiss: () -> Unit,
-    anchorSize: DpSize, // Made required/non-nullable for clarity
-    anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
+    anchorSize: DpSize,
+    anchorPosition: androidx.compose.ui.geometry.Offset,
     expandUp: Boolean = false,
-    hazeState: dev.chrisbanes.haze.HazeState? = null, // [FIX] Add Haze Support
-    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null, // [NEW] For Lens System
+    hazeState: dev.chrisbanes.haze.HazeState? = null,
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
 
@@ -60,7 +59,7 @@ fun MorphingGlassMenu(
         return
     }
 
-    // [FIX] Force a refresh of the glass effect shortly after opening
+    // Force a refresh of the glass effect shortly after opening
     var refreshTrigger by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(isVisible) {
         if (isVisible) {
@@ -96,7 +95,7 @@ fun MorphingGlassMenu(
     val targetY = if (expandUp) {
             anchorPosition.y - targetSize.height - gap
     } else {
-            // [FIX] Align Top-Top for "Magnification" effect (Button morphs into Menu)
+            // Align Top-Top for "Magnification" effect (Button morphs into Menu)
             // Removed startHeight + gap offset to ensure start position covers the button exactly
             anchorPosition.y 
     }
@@ -105,10 +104,6 @@ fun MorphingGlassMenu(
     val popSpring = spring<Float>(dampingRatio = 0.82f, stiffness = 250f)
 
     // Animated Values
-    // When closing (transition.targetState == false && transition.currentState == true),
-    // we want to stay at the "Target" (Expanded) values and just fade out (alpha -> 0).
-    // So we use (open || transition.currentState) to check if we are in Open or Closing state.
-    
     val offsetX by transition.animateFloat(transitionSpec = { popSpring }, label = "X") { open ->
         if (open) targetX else anchorPosition.x 
     }
@@ -136,17 +131,16 @@ fun MorphingGlassMenu(
     ) { open -> if (open) 1f else 0f }
 
     // 3. Render Overlay (No Popup)
-    // [FIX] Using Box Overlay instead of Popup to ensure shared Window for Haze Transparency
+    // Using Box Overlay instead of Popup to ensure shared Window for Haze Transparency
     
     // Full-screen overlay for outside clicks
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(1000f) // Try to float on top if possible (only works if siblings)
-            .offset { IntOffset(0, 0) } // Reset any parent offset? No, fillMaxSize takes parent bounds.
+            .zIndex(1000f) 
+            .offset { IntOffset(0, 0) } 
     ) {
         // Scrim (Handle dismiss)
-        // Only clickable if open? Yes.
         if (isVisible) {
             Box(
                 modifier = Modifier
@@ -172,8 +166,8 @@ fun MorphingGlassMenu(
             modifier = Modifier
                 // Apply Global Offset
                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                .graphicsLayer { alpha = menuAlpha } // Fade In/Out Container
-                // [FIX] Report coordinates for Global Lens System
+                .graphicsLayer { alpha = menuAlpha }
+                // Report coordinates for Global Lens System
                 // Only report when expanded and effectively visible to avoid ghost frames
                 .onGloballyPositioned { coords ->
                     if (isExpanded && menuAlpha > 0.05f) {
@@ -182,13 +176,19 @@ fun MorphingGlassMenu(
                 }
                 .then(
                     if (hazeState != null) {
+                         // Add BackHandler for Gesture Navigation
+                         androidx.activity.compose.BackHandler(enabled = isExpanded && menuAlpha > 0.1f) {
+                             onDismiss()
+                         }
+
                          Modifier
                             .clip(RoundedCornerShape(with(density) { cornerRadius.toDp() }))
                             .hazeChild(
                                 state = hazeState, 
                                 style = HazeStyle(
+                                    backgroundColor = Color.White,
                                     blurRadius = 20.dp,
-                                    tint = HazeTint(Color.White.copy(alpha = 0.4f)),
+                                    tint = HazeTint(Color.Transparent),
                                     noiseFactor = 0.05f
                                 )
                             )

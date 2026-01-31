@@ -35,8 +35,8 @@ fun SongItem(
     viewModel: com.vagueplayer.music.viewmodel.AudioViewModel,
     matchType: String? = null,
     onClick: ((com.vagueplayer.music.data.model.Song) -> Unit)? = null,
-    onLongClick: ((com.vagueplayer.music.data.model.Song) -> Unit)? = null, // [NEW] Long Click Handler
-    onMenuClick: ((com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset) -> Unit)? = null // [UPDATED] Pass Offset
+    onLongClick: ((com.vagueplayer.music.data.model.Song) -> Unit)? = null,
+    onMenuClick: ((com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset) -> Unit)? = null
 ) {
     val isSelected = selectedIds.contains(song.id)
     var menuAnchor by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
@@ -48,7 +48,7 @@ fun SongItem(
             .background(androidx.compose.ui.graphics.Color.White)
             .bouncyClickable(
                 targetScale = 0.98f,
-                onLongClick = { onLongClick?.invoke(song) }, // [NEW] Pass long click
+                onLongClick = { onLongClick?.invoke(song) },
                 onClick = {
                     if (isSelectionMode) {
                         viewModel.toggleSelection(song.id)

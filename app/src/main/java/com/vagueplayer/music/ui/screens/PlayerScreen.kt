@@ -33,7 +33,7 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.automirrored.filled.List
 import com.vagueplayer.music.ui.components.RoundedRepeatIcon
-import com.vagueplayer.music.ui.components.RoundedShuffleIcon // [NEW] Added Import
+import com.vagueplayer.music.ui.components.RoundedShuffleIcon
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -46,7 +46,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
-import androidx.compose.runtime.* // [FIX] Ensure setValue/getValue are available
+import androidx.compose.runtime.*
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Pause
@@ -117,10 +117,11 @@ fun PlayerScreen(
     viewModel: AudioViewModel,
     onDismiss: () -> Unit,
     onTogglePlaylist: () -> Unit,
-    onShowRepeatMenu: (androidx.compose.ui.geometry.Offset) -> Unit, // [NEW] Hoisted
-    isOverlayVisible: Boolean = false, // [FIX] New Param to disable back handler
-    sharedTransitionScope: SharedTransitionScope? = null, // [NEW] Shared Element Scope
-    animatedVisibilityScope: AnimatedVisibilityScope? = null // [NEW] Visibility Scope
+
+    onShowRepeatMenu: (androidx.compose.ui.geometry.Offset) -> Unit,
+    isOverlayVisible: Boolean = false,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     val isPlaying by viewModel.isPlaying.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
@@ -131,13 +132,13 @@ fun PlayerScreen(
     var isLyricsVisible by remember { mutableStateOf(false) }
     // showRepeatMenu REMOVED
     var showLoopCountDialog by remember { mutableStateOf(false) }
-    var showSleepTimerDialog by remember { mutableStateOf(false) } // [NEW] Sleep Timer State
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
     
     // Lifted state for access in Overlay
     // Lifted state for access in Overlay
     val repeatMode by viewModel.repeatMode.collectAsState()
     
-    // [FIX] Capture Repeat Button Position (Hoisted for Overlay)
+    // Capture Repeat Button Position (Hoisted for Overlay)
     var repeatButtonPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
 
     // Bounds for Morphing Menus
@@ -147,7 +148,7 @@ fun PlayerScreen(
 
 
 
-    // Local HazeState [RESTORED]
+    // Local HazeState
     val hazeState = remember { HazeState() }
 
     
@@ -159,7 +160,7 @@ fun PlayerScreen(
     // 2. Slider Interaction State
     var isSliderInteracting by remember { mutableStateOf(false) }
     
-    // [NEW] Sync-Render State
+    // Sync-Render State
     var sliderPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) } // Root Coordinates
     var sliderSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     var containerPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) } // Root Coordinates
@@ -172,13 +173,13 @@ fun PlayerScreen(
     }
     val currentScale by animateFloatAsState(targetValue = if (isSliderInteracting) 1.2f else 1.0f, animationSpec = animationSpec, label = "GlassScale")
     
-    // [FIX] Sync with GlassProgressSlider: Narrower Edge (20f) and Scale it (x1.2) to prevent "Ring Pop" artifact
+    // Sync with GlassProgressSlider: Narrower Edge (20f) and Scale it (x1.2) to prevent "Ring Pop" artifact
     val currentEdgeWidth by animateFloatAsState(
         targetValue = if (isSliderInteracting) 24.0f else 20.0f, 
         label = "Edge Width"
     )
     
-    // [FIX] Animate Distortion: 50.0 (Idle) -> 65.0 (Active)
+    // Animate Distortion: 50.0 (Idle) -> 65.0 (Active)
     val currentDistortion by animateFloatAsState(
         targetValue = if (isSliderInteracting) 65.0f else 50.0f, 
         label = "Distortion"
@@ -190,10 +191,10 @@ fun PlayerScreen(
 
     // --- PORTAL STATE HOISTING END ---
     
-    // [NEW] Predictive Back State
+    // Predictive Back State
     var backProgress by remember { mutableFloatStateOf(0f) }
     
-    // [NEW] Handle Back Press with Predictive Animation
+    // Handle Back Press with Predictive Animation
     androidx.activity.compose.PredictiveBackHandler(enabled = !isOverlayVisible) { progress ->
         try {
             progress.collect { event ->
@@ -210,16 +211,14 @@ fun PlayerScreen(
 
     // --- LIQUID COLOR LOGIC REMOVED (White Background Only) ---
     
-    // [NEW] Shared Progress State for Dual Render
-    // Lifted from local scope to support Ghost Track
-    // [NEW] Shared Progress State for Dual Render
+    // Shared Progress State for Dual Render
     // Lifted from local scope to support Ghost Track
     val currentProgress = if (isDragging) dragProgress else (if (duration > 0) progress / duration.toFloat() else 0f)
 
-    // [NEW] Ghost Layout State
+    // Ghost Layout State
     var sliderLayoutCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     
-    // [NEW] Calculate Lens Bounds (Slider Position) for AGSL Shader
+    // Calculate Lens Bounds (Slider Position) for AGSL Shader
     // We transform the slider coordinates to the Root Box space
     // var containerPosition by remember { mutableStateOf(Offset.Zero) } // Already defined above
     
@@ -268,7 +267,7 @@ fun PlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black) // [FIX] Black background safety net. If blur fails, at least text is visible.
+            .background(Color.Black) // Black background safety net. If blur fails, at least text is visible.
             .liquidGlassLens(
                 bounds1 = lensBounds,
                 cornerRadius = 8.dp, // Thumb Radius (16dp height / 2)
@@ -288,14 +287,13 @@ fun PlayerScreen(
 
 
     ) {
-        // [NEW] Haze Source Box: Wraps Background Only
+        // Haze Source Box: Wraps Background Only
         // This Box contains the elements to be blurred/refracted.
         Box(
              modifier = Modifier
                  .fillMaxSize()
                  .onGloballyPositioned { containerPosition = it.positionInRoot() }
-                 .onGloballyPositioned { containerPosition = it.positionInRoot() }
-                 .haze(state = hazeState) // [RESTORED] Haze Source on Background Only
+                 .haze(state = hazeState) // Haze Source on Background Only
         ) {
               // B. Album Art Overlay (Blurred)
               AsyncImage(
@@ -314,7 +312,7 @@ fun PlayerScreen(
                      .fillMaxSize()
                      .background(Color.Black.copy(alpha = 0.3f))
              )
-             // [RESTORED] Simple Haze Source (just Background)
+             // Simple Haze Source (just Background)
              // Phantom layout removed as per user request to simplify.
 
              // Ghost Layout Removed
@@ -382,7 +380,7 @@ fun PlayerScreen(
             Spacer(modifier = Modifier.weight(1f))
             
             // B. Large Album Art
-            // [SHARED ELEMENT] Cover Art Morphing
+            // Cover Art Morphing
             val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
                 with(sharedTransitionScope) {
                     Modifier.sharedElement(
@@ -417,7 +415,7 @@ fun PlayerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp), // [FIX] Enforce fixed height to match Phantom
+                    .height(72.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -467,7 +465,7 @@ fun PlayerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp), // [FIX] Spacing below labels, above slider
+                    .padding(bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
@@ -586,7 +584,7 @@ fun PlayerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding() // FIX: Avoid system gesture bar overlap
+                    .navigationBarsPadding()
                     .padding(bottom = 30.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -621,11 +619,11 @@ fun PlayerScreen(
                              }
                              
                              val tint = when {
-                                 isLoopActive -> Color.White // [USER REQUEST] Standard White
-                                 isShuffleEnabled -> Color.White // [USER REQUEST] Standard White
+                                 isLoopActive -> Color.White
+                                 isShuffleEnabled -> Color.White
                                  repeatMode == Player.REPEAT_MODE_ONE -> Color.White
                                  repeatMode == Player.REPEAT_MODE_ALL -> Color.White
-                                 else -> Color.White.copy(alpha = 0.4f) // [ADJUST] Dimmer for inactive
+                                 else -> Color.White.copy(alpha = 0.4f)
                              }
                              
                              if (isLoopActive) {
@@ -727,7 +725,7 @@ fun PlayerScreen(
                 var text by remember { mutableStateOf("1") }
                 
                 GlassDialog(
-                    hazeState = hazeState, // [FIX] Added HazeState
+                    hazeState = hazeState,
                     onDismissRequest = { showLoopCountDialog = false },
                     icon = Icons.Default.RepeatOne,
                     title = "循环次数",
@@ -769,7 +767,7 @@ fun PlayerScreen(
                  val currentMin = if (remaining != null) kotlin.math.ceil(remaining!! / 60000.0).toInt() else null
                  
                  com.vagueplayer.music.ui.components.SleepTimerDialog(
-                     hazeState = hazeState, // [FIX] Added HazeState
+                     hazeState = hazeState,
                      currentTimerMin = currentMin,
                      onSetTimer = { min ->
                          viewModel.startSleepTimer(min ?: 0)

@@ -26,9 +26,9 @@ import androidx.compose.ui.unit.sp
 fun PlaylistActionMenu(
     isExpanded: Boolean,
     anchorSize: androidx.compose.ui.unit.DpSize, // Made required
-    anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
-    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null, // [NEW] Unified Lens Support
-    hazeState: dev.chrisbanes.haze.HazeState? = null, // [FIX] Add Haze Support
+    anchorPosition: androidx.compose.ui.geometry.Offset,
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null,
+    hazeState: dev.chrisbanes.haze.HazeState? = null,
     onAddPlaylist: () -> Unit,
     onImportPlaylist: () -> Unit,
     onExportPlaylist: () -> Unit,
@@ -39,7 +39,7 @@ fun PlaylistActionMenu(
         anchorSize = anchorSize,
         anchorPosition = anchorPosition, // Forwarded
         onLayoutCoordinates = onLayoutCoordinates, // Forwarded
-        hazeState = hazeState, // [FIX] Pass Haze State
+        hazeState = hazeState,
         onDismiss = onDismiss,
         expandUp = false // Default
     ) {

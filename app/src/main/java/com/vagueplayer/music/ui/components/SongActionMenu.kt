@@ -26,9 +26,9 @@ fun SongActionMenu(
     onPlayNext: (Song) -> Unit,
     onAddToPlaylist: (Song) -> Unit,
     onDelete: (Song) -> Unit,
-    anchorSize: androidx.compose.ui.unit.DpSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp), // [NEW] Flexible Size
+    anchorSize: androidx.compose.ui.unit.DpSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp),
     onLayoutCoordinates: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit = {},
-    hazeState: dev.chrisbanes.haze.HazeState? = null // [FIX] Add Haze Support
+    hazeState: dev.chrisbanes.haze.HazeState? = null
 ) {
     if (song == null) return
 

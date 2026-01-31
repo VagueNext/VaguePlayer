@@ -30,9 +30,9 @@ fun RepeatModeMenu(
     isExpanded: Boolean,
     onDismiss: () -> Unit,
     anchorSize: androidx.compose.ui.unit.DpSize, // Made required
-    anchorPosition: androidx.compose.ui.geometry.Offset, // [NEW] Explicit Anchor Position
-    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null, // [NEW] Unified Lens Support
-    hazeState: dev.chrisbanes.haze.HazeState? = null, // [FIX] Add Haze Support
+    anchorPosition: androidx.compose.ui.geometry.Offset,
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null,
+    hazeState: dev.chrisbanes.haze.HazeState? = null,
     currentMode: Int,
     onModeSelected: (Int) -> Unit,
     onSetCount: () -> Unit,
@@ -43,7 +43,7 @@ fun RepeatModeMenu(
         anchorSize = anchorSize,
         anchorPosition = anchorPosition, // Forwarded
         onLayoutCoordinates = onLayoutCoordinates, // Forwarded
-        hazeState = hazeState, // [FIX] Pass Haze State
+        hazeState = hazeState,
         expandUp = true,
     ) {
         // Content

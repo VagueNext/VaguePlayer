@@ -24,15 +24,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.ui.graphics.graphicsLayer // [FIX] Added import
-import androidx.compose.animation.core.Animatable // [FIX] Added import
-import androidx.compose.runtime.rememberCoroutineScope // [FIX] Added import
-import androidx.compose.material.icons.filled.Close // [FIX] Restored import
-import androidx.compose.runtime.rememberCoroutineScope // [FIX] Added import
-import androidx.compose.material.icons.filled.Close // [FIX] Restored import
-import androidx.compose.foundation.interaction.MutableInteractionSource // [FIX] Added import
-import androidx.compose.foundation.interaction.collectIsPressedAsState // [FIX] Added import
-import androidx.compose.ui.zIndex // [FIX] Added import
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.zIndex
 // OverlayClip import removed
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
@@ -79,8 +77,8 @@ fun SettingsScreen(
     // Animation Values (Derived from swipeProgress)
     val scale = 1f - (swipeProgress.value * 0.15f) // Shrink more during gesture
     val cornerRadius = 24.dp * swipeProgress.value // Larger corner radius
-    val alpha = 1f - (swipeProgress.value * 0.7f) // [FIX] Stronger fade to reveal background (0.3 at max)
-    val translationX = swipeProgress.value * 200f // [FIX] Slide right during back gesture
+    val alpha = 1f - (swipeProgress.value * 0.7f) // Stronger fade to reveal background (0.3 at max)
+    val translationX = swipeProgress.value * 200f // Slide right during back gesture
 
     // Scroll State
     val listState: LazyListState = rememberLazyListState()
@@ -129,7 +127,7 @@ fun SettingsScreen(
             LazyColumn(
             state = listState,
             modifier = Modifier
-                .fillMaxSize(), // [FIX] Removed .haze() - causes ghosting after navigation
+                .fillMaxSize(),
             contentPadding = PaddingValues(top = 120.dp, bottom = 20.dp, start = 20.dp, end = 20.dp)
         ) {
                 item {
@@ -194,7 +192,7 @@ fun SettingsScreen(
             com.vagueplayer.music.ui.components.ScreenHeader(
                 title = "设置",
                 scrollAlpha = scrollAlpha,
-                hazeState = hazeState, // [NEW] Pass HazeState
+                hazeState = hazeState,
                 modifier = Modifier.align(Alignment.TopCenter),
                 navigationIcon = {
                     com.vagueplayer.music.ui.components.GlassIconButton(
@@ -306,8 +304,8 @@ fun SettingsSwitchItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .zIndex(if (isAnimating || isPressed) 10f else 0f) // [FIX] Lift above siblings during interaction
-            .graphicsLayer { clip = false } // [FIX] Allow children (Switch) to draw outside bounds
+            .zIndex(if (isAnimating || isPressed) 10f else 0f)
+            .graphicsLayer { clip = false }
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.foundation.LocalIndication.current

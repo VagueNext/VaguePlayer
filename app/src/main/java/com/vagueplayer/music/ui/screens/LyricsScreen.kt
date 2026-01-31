@@ -454,7 +454,7 @@ fun KaraokeLine(
                 style = androidx.compose.ui.text.TextStyle(
                     shadow = androidx.compose.ui.graphics.Shadow(
                         color = Color.White.copy(alpha = animatedGlow),
-                        blurRadius = 15f // [FIX] Reduced from 30f to avoid box artifacts
+                        blurRadius = 15f // Reduced from 30f to avoid box artifacts
                     )
                 ),
                 textAlign = TextAlign.Center,

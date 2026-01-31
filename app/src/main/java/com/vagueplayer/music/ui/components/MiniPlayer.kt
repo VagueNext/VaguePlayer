@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.MoreVert // [NEW]
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -71,9 +71,9 @@ fun MiniPlayer(
     collapseProgress: Float = 0f, 
     onExpand: () -> Unit,
     onPlaylistClick: () -> Unit,
-    isSelectionMode: Boolean = false, // [NEW] Mode flag
-    selectedIds: Set<Long> = emptySet(), // [NEW] Added for selection status
-    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }, // [NEW] Updated Signature
+    isSelectionMode: Boolean = false,
+    selectedIds: Set<Long> = emptySet(),
+    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> },
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
@@ -92,7 +92,7 @@ fun MiniPlayer(
 
     Box(
         modifier = modifier
-            .fillMaxWidth(), // [FIX] Removed clickable from parent (blocked by child draggable)
+            .fillMaxWidth(),
         contentAlignment = Alignment.CenterStart
     ) {
         // Re-implement swipe logic
@@ -100,7 +100,7 @@ fun MiniPlayer(
             modifier = Modifier
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .fillMaxSize() // Already fills max size
-                .padding(horizontal = 4.dp) // [RESIZE] Even less padding
+                .padding(horizontal = 4.dp)
                 .clickable(onClick = onExpand) 
                 .draggable(
                     state = swipeableState,
@@ -123,11 +123,11 @@ fun MiniPlayer(
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
-                modifier = Modifier.fillMaxHeight(), // [FIX] Keep alignment fix
+                modifier = Modifier.fillMaxHeight(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Album Art / Icon [RESIZE]
-                // [SHARED ELEMENT] Cover Art Morphing
+                // Album Art / Icon
+                // Cover Art Morphing
                 val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
                     with(sharedTransitionScope) {
                         Modifier.sharedElement(
@@ -142,10 +142,10 @@ fun MiniPlayer(
 
                 Box(
                     modifier = Modifier
-                        .padding(start = 8.dp) // [USER] Adjusted: 10dp -> 8dp
+                        .padding(start = 8.dp)
                         .then(sharedModifier) 
-                        .size(28.dp) // [REVERT] Original 28dp
-                        .clip(RoundedCornerShape(8.dp)) // [REVERT] Original 8dp
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(Color.LightGray)
                 ) {
                     AsyncImage(
@@ -158,14 +158,14 @@ fun MiniPlayer(
 
                 Spacer(modifier = Modifier.width(10.dp))
 
-                // Text [RESIZE]
+                // Text
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center // [FIX] Revert alignment to Center as requested
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Text(
                         text = currentSong?.title ?: "Not Playing",
-                        fontSize = 14.sp, // [FIX] Bump font size slightly for readability
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black.copy(alpha = 0.8f), 
                         maxLines = 1,
@@ -175,16 +175,16 @@ fun MiniPlayer(
                     )
                     Text(
                         text = currentSong?.artist ?: "Vague Player",
-                        fontSize = 10.sp, // [REVERT] Original 10sp
-                        color = Color.Black.copy(alpha = 0.5f), // [REVERT] Original 0.5f
+                        fontSize = 10.sp,
+                        color = Color.Black.copy(alpha = 0.5f),
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        lineHeight = 12.sp // [REVERT] Original 12sp
+                        lineHeight = 12.sp
                     )
                 }
 
-                // Controls [RESIZE]
-                // Controls [REVISED] Transparent Style based on user feedback
+                // Controls
+                // Controls Transparent Style based on user feedback
                 IconButton(
                     onClick = { viewModel.togglePlayPause() },
                     modifier = Modifier.size(32.dp)
@@ -192,8 +192,8 @@ fun MiniPlayer(
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = "Play/Pause",
-                        tint = Color.Black, // [REVERT] Original Black
-                        modifier = Modifier.size(26.dp) // [REVERT] Original 26dp
+                        tint = Color.Black,
+                        modifier = Modifier.size(26.dp)
                     )
                 }
                 
@@ -217,7 +217,7 @@ fun MiniPlayer(
                             }
                     ) {
                         Icon(
-                            // [FIX] Show MoreVert (Three Dots) in Selection Mode as requested
+                            // Show MoreVert (Three Dots) in Selection Mode as requested
                             imageVector = if (isSelectionMode) Icons.Default.MoreVert else Icons.AutoMirrored.Filled.List,
                             contentDescription = "Playlist",
                             tint = Color.Black.copy(alpha = 0.8f * playlistAlpha),

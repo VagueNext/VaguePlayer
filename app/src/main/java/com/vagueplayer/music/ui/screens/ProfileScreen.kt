@@ -19,8 +19,8 @@ import com.vagueplayer.music.ui.theme.AccentBlue
 import com.vagueplayer.music.ui.components.LiquidSwitch
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
-import com.vagueplayer.music.ui.components.bouncyClickable // [FIX] Added import
-import com.vagueplayer.music.ui.animation.transformSource // [NEW]
+import com.vagueplayer.music.ui.components.bouncyClickable
+import com.vagueplayer.music.ui.animation.transformSource
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.BoundsTransform
@@ -35,7 +35,7 @@ fun ProfileScreen(
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
     hazeState: HazeState? = null
 ) {
-    // [FIX] Use effective state (from MainScreen or local fallback)
+    // Use effective state (from MainScreen or local fallback)
     val effectiveHazeState = hazeState ?: remember { HazeState() }
     
     // Scroll State
@@ -57,7 +57,7 @@ fun ProfileScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .haze(effectiveHazeState), // [FIX] Mark Content as Source
+                .haze(effectiveHazeState),
             contentPadding = PaddingValues(top = 52.dp, bottom = 20.dp, start = 20.dp, end = 20.dp)
         ) {
             item {
@@ -134,7 +134,7 @@ fun ProfileScreen(
                         ),
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    // [NEW] Shared Element Source
+                    // Shared Element Source
                     // Inner box validation removed
                     Box(modifier = Modifier.fillMaxSize())
                     
@@ -164,7 +164,7 @@ fun ProfileScreen(
         com.vagueplayer.music.ui.components.ScreenHeader(
             title = "我的",
             scrollAlpha = scrollAlpha,
-            hazeState = effectiveHazeState, // [FIX] Use effective HazeStatw
+            hazeState = effectiveHazeState,
             modifier = Modifier
                 .align(Alignment.TopCenter)
         )

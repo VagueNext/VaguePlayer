@@ -60,8 +60,8 @@ fun AlphabetSideBar(
         // 字母索引列表
         Column(
             modifier = Modifier
-                .wrapContentHeight() // [FIX] Wrap height to content (fixes wide spacing)
-                .width(20.dp) // [FIX] Fixed width for touch target
+                .wrapContentHeight()
+                .width(20.dp)
                 .align(if (isOnLeft) Alignment.CenterStart else Alignment.CenterEnd)
                 .padding(
                     start = if (isOnLeft) 4.dp else 0.dp,

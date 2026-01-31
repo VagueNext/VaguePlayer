@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import com.vagueplayer.music.ui.theme.AccentBlue
-import androidx.compose.foundation.border // [FIX] Added missing import
+import androidx.compose.foundation.border
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
@@ -21,10 +21,8 @@ import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay // [NEW]
-import androidx.compose.material3.SwipeToDismissBox // [NEW]
-import androidx.compose.material3.SwipeToDismissBoxValue // [NEW]
-import androidx.compose.material3.rememberSwipeToDismissBoxState // [NEW]
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -38,7 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.positionInRoot // [FIX] Added missing import
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -52,18 +50,18 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 
 import androidx.activity.compose.BackHandler
-import kotlinx.coroutines.launch // [FIX] Required for scrolling
-import androidx.compose.ui.geometry.Offset // [FIX] Added missing import
-import com.vagueplayer.music.ui.components.simpleGlass // [FIX] Import
+import kotlinx.coroutines.launch
+import androidx.compose.ui.geometry.Offset
+import com.vagueplayer.music.ui.components.simpleGlass
 
 @OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
-    onShowSortOptions: (Offset) -> Unit, // [NEW] Hoisted Callback
-    hazeState: HazeState? = null, // [NEW] Global Haze State from MainScreen
-    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> } // [NEW] Add this
+    onShowSortOptions: (Offset) -> Unit,
+    hazeState: HazeState? = null,
+    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
 ) {
-    // [FIX] Define Local State for Button Position
+    // Define Local State for Button Position
     var sortButtonPosition by remember { mutableStateOf(Offset.Zero) }
 
     val context = LocalContext.current
@@ -113,7 +111,7 @@ fun LibraryScreen(
     // Scroll State
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    // [FIX] Use Global HazeState if provided to ensure sync with MainScreen.
+    // Use Global HazeState if provided to ensure sync with MainScreen.
     // Fallback to local state ONLY if null (e.g. standard-alone preview)
     val effectiveHazeState = hazeState ?: remember { HazeState() }
     
@@ -132,15 +130,12 @@ fun LibraryScreen(
     }.value
 
 
-    Box(modifier = Modifier.fillMaxSize()) { // ROOT CONTAINER
-        // [FIX] SOURCE LAYER: Move Haze state to this dedicated sibling box
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .haze(state = effectiveHazeState)
                 .pullRefresh(pullRefreshState)
         ) {
-        // [FIX] CONTENT LAYER: Directly inside SOURCE Box
+        // CONTENT LAYER: Directly inside SOURCE Box
             // Note: Headers will be floating, so no static header here
             // Sidebar State
             val isSidebarLeft = viewModel.isSidebarOnLeft.collectAsState().value
@@ -150,7 +145,8 @@ fun LibraryScreen(
             // Takes up remaining space
             Surface(
                 modifier = Modifier
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .haze(state = effectiveHazeState), // [MOVED] Source applied here (Content only)
                 color = Color.White, // Pure White Card
                 // shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp), // [USER REQUEST] Removed rounded corners
                 tonalElevation = 0.dp // Flat
@@ -239,7 +235,7 @@ fun LibraryScreen(
                 }
                 } // Close Inner Box (List + Sidebar)
             } // Close Surface (White Sheet)
-        } // [FIX] Close SOURCE LAYER (haze node) here to make headers siblings
+        // Content Layer Ends, Headers overlay on top within the same Box
 
         // Floating Headers (On Top of Content)
         if (isSelectionMode) {
@@ -251,14 +247,15 @@ fun LibraryScreen(
                     .height(96.dp)
                     .background(Color.White)
                     .align(Alignment.TopCenter)
-                    .zIndex(1f) // [FIX] Ensure Header is above all content
-                    // [FIX] Apply Haze Blur to Selection Header
+                    .align(Alignment.TopCenter)
+                    .zIndex(1f) // Ensure Header is above all content
+                    // Apply Haze Blur to Selection Header
                     .hazeChild(
                         state = effectiveHazeState,
                         style = HazeStyle(
                             backgroundColor = Color.White.copy(alpha = 0.7f), 
                             tint = dev.chrisbanes.haze.HazeTint(Color.White.copy(alpha = 0.2f)), 
-                            blurRadius = 30.dp, // [FIX] Match ScreenHeader (30dp)
+                            blurRadius = 30.dp,
                             noiseFactor = 0f
                         )
                     )
@@ -303,7 +300,7 @@ fun LibraryScreen(
             com.vagueplayer.music.ui.components.ScreenHeader(
                 title = "音乐库",
                 scrollAlpha = scrollAlpha,
-                hazeState = effectiveHazeState, // [FIX] Use effective state
+                hazeState = effectiveHazeState,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .zIndex(1f),
@@ -313,7 +310,7 @@ fun LibraryScreen(
                         icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
                         contentDescription = "Sort",
                         tint = Color.Black,
-                        glassTint = Color.White.copy(alpha = 0.2f), // [FIX] Visible glass background
+                        glassTint = Color.White.copy(alpha = 0.2f),
                         modifier = Modifier
                             .onGloballyPositioned { coordinates ->
                                 sortButtonPosition = coordinates.boundsInWindow().topLeft

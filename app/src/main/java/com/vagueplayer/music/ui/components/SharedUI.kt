@@ -1,17 +1,17 @@
  package com.vagueplayer.music.ui.components
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background // [FIX] Added import
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment // [FIX] Restored import
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent // [FIX] Added import
-import androidx.compose.ui.draw.clip // [FIX] Added import
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -21,9 +21,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.RenderEffect // [NEW] Added for Blur
-import androidx.compose.ui.graphics.asComposeRenderEffect // [NEW]
-import android.graphics.RenderEffect as nativeRenderEffect // [NEW]
+import androidx.compose.ui.graphics.RenderEffect
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import android.graphics.RenderEffect as nativeRenderEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -64,7 +64,7 @@ fun GlassIconButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 1.1f else 1.0f, // [FIX] Subtle scale feedback
+        targetValue = if (isPressed) 1.1f else 1.0f,
         animationSpec = spring(dampingRatio = 0.5f, stiffness = 400f), // Snappier spring
         label = "Button Scale"
     )
@@ -117,33 +117,34 @@ fun ScreenHeader(
     modifier: Modifier = Modifier,
     scrollAlpha: Float = 0f, 
     contentColor: Color = Color.Black, 
-    glassTint: Color = Color.White.copy(alpha = 0.4f), // [FIX] Reduced alpha to avoid "white block" look
-    hazeState: HazeState? = null, // [NEW] HazeState for background blur
+    glassTint: Color = Color.White.copy(alpha = 0.4f),
+    hazeState: HazeState? = null,
     navigationIcon: @Composable (() -> Unit)? = null, 
     action: @Composable (() -> Unit)? = null
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // [FIX] Decreased height to 96dp for a more compact top bar
+            // Decreased height to 96dp for a more compact top bar
             .height(96.dp)
     ) {
-        // [FIX] Background blur layer using hazeChild
-        if (scrollAlpha > 0.01f && hazeState != null) {
+        // Background blur layer using hazeChild
+        // Background blur layer using hazeChild
+        // [FIX] Always mount the Box to prevent RenderNode thrashing, control visibility via alpha
+        if (hazeState != null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { 
                         alpha = scrollAlpha 
-                        // [FIX] Removed Offscreen strategy to prevent RenderThread SIGSEGV
                     }
                     .hazeChild(
                         state = hazeState,
                         style = HazeStyle(
-                            backgroundColor = Color.White.copy(alpha = 0.7f), // [FIX] Strong opacity for masking
+                            backgroundColor = Color.White.copy(alpha = 0.7f),
                             tint = dev.chrisbanes.haze.HazeTint(Color.White.copy(alpha = 0.2f)), 
-                            blurRadius = 30.dp, // [FIX] Balanced blur (Recursion fixed)
-                            noiseFactor = 0f // [FIX] Keep disabled for max performance
+                            blurRadius = 30.dp,
+                            noiseFactor = 0f
                         )
                     )
             )
@@ -156,7 +157,7 @@ fun ScreenHeader(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // [NEW] Navigation Icon (e.g. Back)
+            // Navigation Icon (e.g. Back)
             if (navigationIcon != null) {
                 navigationIcon()
                 Spacer(modifier = Modifier.width(12.dp))

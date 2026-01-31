@@ -3,39 +3,39 @@ package com.vagueplayer.music.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border // [FIX] Import border
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.core.graphics.drawable.toBitmap // [FIX] Import toBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Edit // [FIX] Import Edit Icon
-import androidx.compose.material.icons.filled.Menu // [FIX] Import Menu Icon
-import androidx.compose.material.icons.filled.MoreVert // [FIX] Added missing import
-import androidx.compose.foundation.lazy.itemsIndexed // [FIX] Import itemsIndexed
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
-import androidx.compose.runtime.* // [FIX] expanded to * for remember, mutableState
-import androidx.compose.runtime.saveable.rememberSaveable // [FIX] Import
-import androidx.activity.compose.PredictiveBackHandler // [FIX] Import
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer // [FIX] Import
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.res.painterResource // [FIX] Import
-import androidx.compose.ui.draw.clip // [FIX] Import
-import androidx.compose.ui.text.font.FontWeight // [FIX] Import
-import androidx.compose.ui.text.style.TextOverflow // [FIX] Import
-import androidx.compose.foundation.shape.RoundedCornerShape // [FIX] Import
-import androidx.compose.ui.unit.sp // [FIX] Import
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import dev.chrisbanes.haze.HazeState
@@ -43,22 +43,22 @@ import dev.chrisbanes.haze.haze
 import com.vagueplayer.music.data.model.Playlist
 import com.vagueplayer.music.viewmodel.AudioViewModel
 import kotlinx.coroutines.flow.collect
-import com.vagueplayer.music.ui.components.simpleGlass // [FIX] Import simpleGlass
-import androidx.compose.foundation.interaction.MutableInteractionSource // [FIX] Import
-import androidx.compose.ui.layout.onGloballyPositioned // [FIX] Import
-import androidx.compose.ui.layout.boundsInWindow // [FIX] Import
-import androidx.compose.material.icons.automirrored.filled.Sort // [FIX] Import
-import androidx.compose.material.icons.filled.Check // [FIX] Import
-import androidx.compose.ui.layout.positionInWindow // [FIX] Import
-import com.vagueplayer.music.ui.components.liquidGlassLens // [FIX] Import
-import com.vagueplayer.music.ui.components.GlassIconButton // [FIX] Import
-import androidx.palette.graphics.Palette // [NEW] Import
-import android.graphics.Bitmap // [NEW] Import
-import androidx.core.graphics.drawable.toBitmap // [NEW] Import
+import com.vagueplayer.music.ui.components.simpleGlass
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.layout.positionInWindow
+import com.vagueplayer.music.ui.components.liquidGlassLens
+import com.vagueplayer.music.ui.components.GlassIconButton
+import androidx.palette.graphics.Palette
+import android.graphics.Bitmap
+import androidx.core.graphics.drawable.toBitmap
 
-import androidx.compose.runtime.rememberCoroutineScope // [NEW] Import
-import kotlinx.coroutines.launch // [NEW] Import
-import androidx.compose.material3.ExperimentalMaterial3Api // [FIX] Import if needed
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.material3.ExperimentalMaterial3Api
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -68,37 +68,22 @@ fun SharedTransitionScope.PlaylistDetailScreen(
     onDismissRequest: () -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope,
     hazeState: HazeState? = null,
-    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> } // [NEW] Callback for menu
+    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
 ) {
-    // [FIX] Use effective state (from MainScreen or local fallback)
     val effectiveHazeState = hazeState ?: remember { HazeState() }
 
     // Predictive Back State
-    var backProgress by remember { mutableFloatStateOf(0f) }
-    val scale = 1f - (backProgress * 0.1f)
-    val alpha = 1f - (backProgress * 0.2f)
-    val yOffset = backProgress * 100f
-
-    androidx.activity.compose.PredictiveBackHandler { progress ->
-        try {
-            progress.collect { event -> backProgress = event.progress }
-            onDismissRequest()
-        } catch (e: java.util.concurrent.CancellationException) {
-            backProgress = 0f
-        } finally {
-            backProgress = 0f
-        }
-    }
+    // Standard Back Handler to ensure reliable exit
+    androidx.activity.compose.BackHandler(onBack = onDismissRequest)
 
     // State
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf(playlist.name) }
     
-    // Sort Logic - [FIX] Observe Per-Playlist Sort Option
+    // Sort Logic
     val playlistSortOptions by viewModel.playlistSortOptions.collectAsState()
-    val currentSortOption = playlistSortOptions[playlist.id] ?: com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.TITLE // Default to Title if not set
+    val currentSortOption = playlistSortOptions[playlist.id] ?: com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.TITLE
 
-    // [FIX] Selection State (Hoisted to Top Level)
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val selectedIds by viewModel.selectedIds.collectAsState()
 
@@ -108,19 +93,17 @@ fun SharedTransitionScope.PlaylistDetailScreen(
     }
     
     // Menus
-    var showActionMenu by remember { mutableStateOf(false) } // Renamed from showSortMenu
-    var showRealSortMenu by remember { mutableStateOf(false) } // New Sort Menu
+    var showActionMenu by remember { mutableStateOf(false) }
+    var showRealSortMenu by remember { mutableStateOf(false) }
     
-    // [FRAMEWORK] Glass Lens Coordinates (Global Root Relative)
     var rootLayoutCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     var backButtonBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     var sortButtonBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
-    var menuBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) } // [NEW] Menu Bounds
+    var menuBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
 
-    // [CLEANUP] Clear menu bounds after animation to prevent ghost distortion
     LaunchedEffect(showRealSortMenu) {
         if (!showRealSortMenu) {
-            kotlinx.coroutines.delay(400) // Wait for exit animation (350ms)
+            kotlinx.coroutines.delay(400) // Wait for exit animation
             menuBounds = androidx.compose.ui.geometry.Rect.Zero
         }
     }
@@ -129,11 +112,9 @@ fun SharedTransitionScope.PlaylistDetailScreen(
     var actionMenuPosition by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var sortMenuAnchor by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
 
-    // [FRAMEWORK] Tint Logic
     var backIconTint by remember { mutableStateOf(Color.White) }
     var sortIconTint by remember { mutableStateOf(Color.White) }
 
-    // Helper to calculate bounds relative to root
     fun calculateBounds(child: androidx.compose.ui.layout.LayoutCoordinates, root: androidx.compose.ui.layout.LayoutCoordinates?): androidx.compose.ui.geometry.Rect {
         return if (root != null && root.isAttached && child.isAttached) {
             val rootPos = root.positionInWindow()
@@ -149,7 +130,6 @@ fun SharedTransitionScope.PlaylistDetailScreen(
         }
     }
 
-    // Scroll State for Alpha [NEW]
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val scrollAlpha by remember {
         derivedStateOf {
@@ -161,39 +141,28 @@ fun SharedTransitionScope.PlaylistDetailScreen(
 
     Surface(
         modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.alpha = alpha
-                translationY = yOffset
-            },
-        color = Color.Transparent // [FIX] Let container handle background
+            .fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
-        // Root Container - THIS is the shared element destination
+        // Content Container
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp)),
-                    enter = EnterTransition.None,
-                    exit = ExitTransition.None
+                    boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(ContentScale.FillWidth)
                 )
-                .background(MaterialTheme.colorScheme.background) // [FIX] Background moves here
                 .onGloballyPositioned { rootLayoutCoordinates = it }
         ) {
-            // [LAYER 1] Content with Liquid Lens Distortion
-            // The Lens is applied here, distorting the LazyColumn content.
             Box(
                 modifier = Modifier
-                    .fillMaxSize() // [FIX] Removed .haze() - causes ghosting after navigation
+                    .fillMaxSize()
                     .liquidGlassLens(
                         bounds1 = backButtonBounds,
                         bounds2 = sortButtonBounds,
-                        bounds3 = menuBounds, // [NEW] Connect Menu to Lens System
+                        bounds3 = menuBounds,
                         distortionStrength = 45f,
                         edgeWidth = 30f,
                         tint = Color.White.copy(alpha = 0.05f)
@@ -203,65 +172,32 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .haze(effectiveHazeState), // [FIX] Mark List as Source
+                        .haze(effectiveHazeState),
                     contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
-                    // 1. Header Image Item
+                    // 1. Header Image
                     item {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(300.dp)
+                                .height(250.dp)
                         ) {
-                            val coverUri = playlist.songs.firstOrNull()?.albumArtUri
-                            val context = LocalContext.current
-                            
+                            // Background Blur Image
                             AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(coverUri)
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(playlist.songs.firstOrNull()?.albumArtUri)
                                     .crossfade(false)
-                                    .allowHardware(false) 
-                                    .placeholderMemoryCacheKey("cover_${playlist.id}")
+                                    .memoryCacheKey("cover_${playlist.id}")
                                     .build(),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
-                                alignment = Alignment.TopCenter,
-                                onSuccess = { state ->
-                                    // [STRATEGY] Dual-Zone Sampling based on bitmap corners
-                                    // This logic assumes 0,0 is top-left of image, which is consistent.
-                                    val bitmap = state.result.drawable.toBitmap()
-                                    // ... (Keeping simplified tint logic or reusing previous logic if needed, 
-                                    // but for reliability, let's just stick to basic corner sampling for now 
-                                    // since we removed the bounds-based complex sampling to fix the error).
-                                    // Actually, let's perform a simple check:
-                                    
-                                    fun getLuminance(x: Int, y: Int, w: Int, h: Int): Double {
-                                        if (x + w > bitmap.width || y + h > bitmap.height) return 0.0
-                                        val p = IntArray(w * h)
-                                        bitmap.getPixels(p, 0, w, x, y, w, h)
-                                        var lumSum = 0.0
-                                        for (c in p) {
-                                            lumSum += androidx.core.graphics.ColorUtils.calculateLuminance(c)
-                                        }
-                                        return lumSum / p.size
-                                    }
-
-                                    // Simple Corner Sampling (Top-Left 20% and Top-Right 20%)
-                                    val w = bitmap.width
-                                    val h = bitmap.height
-                                    val boxW = (w * 0.2).toInt()
-                                    val boxH = (h * 0.15).toInt()
-                                    
-                                    val lumL = getLuminance(0, 0, boxW, boxH)
-                                    val lumR = getLuminance(w - boxW, 0, boxW, boxH)
-                                    
-                                    backIconTint = if (lumL > 0.45) Color.Black.copy(alpha = 0.87f) else Color.White
-                                    sortIconTint = if (lumR > 0.45) Color.Black.copy(alpha = 0.87f) else Color.White
-                                },
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    // [FIX] Ensure Image Fills Container
-                                    .fillMaxSize()
+                                    .sharedElement(
+                                        state = rememberSharedContentState(key = "cover_${playlist.id}"),
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
+                                    )
                             )
                         }
                     }
@@ -285,6 +221,8 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                                     text = playlist.name,
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier
                                         .weight(1f, fill = false) 
                                 )
@@ -362,20 +300,19 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                 )
             }
 
-            // [LAYER 2] Floating Header (Consolidated)
+            // Floating Header
             com.vagueplayer.music.ui.components.ScreenHeader(
-                title = if (scrollAlpha > 0.5f) playlist.name else "", // Fade title in later
+                title = if (scrollAlpha > 0.5f) playlist.name else "",
                 scrollAlpha = scrollAlpha,
-                contentColor = if (scrollAlpha > 0.5f) Color.Black else backIconTint, // Transition to Black on Glass
-                // glassTint = Color.White.copy(alpha = 0.85f), // [FIX] Removed to use default 0.4f
-                hazeState = effectiveHazeState, // [FIX] Use effective HazeState
+                contentColor = if (scrollAlpha > 0.5f) Color.Black else backIconTint,
+                hazeState = effectiveHazeState,
                 navigationIcon = {
                     GlassIconButton(
                         onClick = onDismissRequest,
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = if (scrollAlpha > 0.5f) Color.Black else backIconTint,
-                        glassTint = Color.White.copy(alpha = 0.2f), // [FIX] Visible glass background
+                        glassTint = Color.White.copy(alpha = 0.2f),
                         modifier = Modifier
                             .onGloballyPositioned { coordinates ->
                                  backButtonBounds = calculateBounds(coordinates, rootLayoutCoordinates)
@@ -388,7 +325,7 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                         icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
                         contentDescription = "Sort",
                         tint = if (scrollAlpha > 0.5f) Color.Black else sortIconTint,
-                        glassTint = Color.White.copy(alpha = 0.2f), // [FIX] Visible glass background
+                        glassTint = Color.White.copy(alpha = 0.2f),
                         modifier = Modifier
                             .onGloballyPositioned { coordinates ->
                                 val bounds = calculateBounds(coordinates, rootLayoutCoordinates)
@@ -402,18 +339,16 @@ fun SharedTransitionScope.PlaylistDetailScreen(
             )
         }
 
-        // [LAYER 3] Overlays
-        
-        // 2. [NEW] Sort Menu
+        // Sort Menu
         com.vagueplayer.music.ui.components.MorphingGlassMenu(
             isExpanded = showRealSortMenu,
             onDismiss = { showRealSortMenu = false },
-            anchorSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp), // [RESIZE] Updated to 48dp
+            anchorSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp),
             anchorPosition = sortMenuAnchor, 
-            hazeState = effectiveHazeState, // [FIX] Haze Support
+            hazeState = effectiveHazeState,
             onLayoutCoordinates = { calculateBounds(it, rootLayoutCoordinates).let { rect -> menuBounds = rect } }
         ) {
-              val currentSort = currentSortOption // [FIX] Use Local Context Option
+              val currentSort = currentSortOption
               val options: List<Pair<String, com.vagueplayer.music.viewmodel.AudioViewModel.SortOption>> = listOf(
                   "标题" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.TITLE,
                   "艺术家" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.ARTIST,
@@ -434,11 +369,10 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                            modifier = Modifier
                                .fillMaxWidth()
                                .clickable { 
-                                   viewModel.setSortOption(option, playlist.id) // [FIX] Set for THIS Playlist ID
-                                   // viewModel.resortSongs() // [FIX] No need to resort Global Library
+                                   viewModel.setSortOption(option, playlist.id)
                                    showRealSortMenu = false
                                }
-                               .padding(vertical = 8.dp, horizontal = 20.dp), // [MATCH] MainScreen Padding
+                               .padding(vertical = 8.dp, horizontal = 20.dp),
                            horizontalArrangement = Arrangement.SpaceBetween,
                            verticalAlignment = Alignment.CenterVertically
                       ) {
@@ -449,7 +383,6 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                               fontWeight = if(isSelected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
                           )
                           
-                          // [MATCH] Custom Circle from MainScreen (Not RadioButton)
                           Box(
                               modifier = Modifier
                                   .size(20.dp)
@@ -475,6 +408,7 @@ fun SharedTransitionScope.PlaylistDetailScreen(
         
         if (showRenameDialog) {
             com.vagueplayer.music.ui.components.GlassDialog(
+                hazeState = effectiveHazeState,
                 onDismissRequest = { showRenameDialog = false },
                 title = "重命名歌单",
                 content = {

@@ -48,7 +48,7 @@ fun LiquidSwitch(
     uncheckedTrackColor: Color = Color(0xFFE9E9EA)
 ) {
     // 布局常量
-    val trackWidth = 60.dp // [USER] Wider track
+    val trackWidth = 60.dp // Wider track
     val trackHeight = 32.dp 
     val padding = 2.dp
     
@@ -77,7 +77,7 @@ fun LiquidSwitch(
     val thumbWidthResting = thumbHeightResting * 1.2f // 33.6dp (Ellipse)
     
     // Growing logic (Aggressive Expansion for Overflow)
-    // [USER REQUEST] "Break out of box" -> Make it significantly larger than track
+    // "Break out of box" -> Make it significantly larger than track
     val widthMax = thumbWidthResting * 1.7f // Much wider
     val heightMax = thumbHeightResting * 1.9f // Taller than track (32dp -> ~53dp)
     
@@ -93,7 +93,7 @@ fun LiquidSwitch(
     Box(
         modifier = modifier
             .size(width = trackWidth, height = trackHeight)
-            .graphicsLayer { clip = false } // [FIX] Allow thumb to expand beyond track limits
+            .graphicsLayer { clip = false } // Allow thumb to expand beyond track limits
             .clickable(
                 indication = null,
                 interactionSource = finalInteractionSource,
@@ -130,7 +130,7 @@ fun LiquidSwitch(
             val centerX = lerp(combinedStartPadding, combinedEndPadding, progress)
             val centerY = trackHeight / 2 // Vertically centered
             
-            // [FIX] Use requiredSize to bypass parent constraints and allow "breaking the frame"
+            // Use requiredSize to bypass parent constraints and allow "breaking the frame"
             // The parent BoxWithConstraints might clip if we don't handle alignment or overflow.
             // We use a centered Box that is allowed to draw outside.
             Box(
@@ -138,11 +138,11 @@ fun LiquidSwitch(
                     .align(Alignment.CenterStart) // Anchor start
                     .graphicsLayer {
                         translationX = centerX.toPx() - (currentWidth.toPx() / 2)
-                        // [FIX] Vertical Centering handled by Alignment.CenterStart
+                        // Vertical Centering handled by Alignment.CenterStart
                         // Previous manual calculation was adding an offset (centerY - height/2) which shifted it down.
                         translationY = 0f
                         
-                        // [CRITICAL] Disable clipping here too
+                        // Disable clipping here too
                         clip = false 
                     }
                     .requiredSize(width = currentWidth, height = currentHeight) // Force size, ignoring constraints

@@ -35,7 +35,7 @@ fun FolderManagerScreen(
     onBack: () -> Unit,
     hazeState: HazeState? = null
 ) {
-    // [FIX] Use LOCAL HazeState
+    // Use LOCAL HazeState
     val localHazeState = remember { HazeState() }
     
     val context = LocalContext.current
@@ -68,7 +68,7 @@ fun FolderManagerScreen(
         }
     }.value
 
-    // [FIX] Changed Column to Box to allow Floating Header overlay
+    // Changed Column to Box to allow Floating Header overlay
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -79,7 +79,7 @@ fun FolderManagerScreen(
             state = scrollState,
             modifier = Modifier
                 .fillMaxSize()
-                .haze(localHazeState), // [FIX] Mark as Haze Source
+                .haze(localHazeState), // Mark as Haze Source
             contentPadding = PaddingValues(top = 66.dp, bottom = 120.dp, start = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -152,7 +152,7 @@ fun FolderManagerScreen(
         com.vagueplayer.music.ui.components.ScreenHeader(
             title = "音乐文件夹",
             scrollAlpha = scrollAlpha,
-            hazeState = localHazeState, // [FIX] Use local HazeState
+            hazeState = localHazeState, // Use local HazeState
             contentColor = Color.White,
             glassTint = Color.Black.copy(alpha = 0.5f),
             navigationIcon = {
@@ -171,7 +171,7 @@ fun FolderManagerScreen(
                 }
             },
             modifier = Modifier
-                .align(Alignment.TopCenter) // [FIX] Updated for Box layout
+                .align(Alignment.TopCenter) // Updated for Box layout
         )
     }
 }

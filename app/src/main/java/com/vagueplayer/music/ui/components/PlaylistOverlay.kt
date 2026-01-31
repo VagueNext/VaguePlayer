@@ -27,10 +27,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue // [FIX] Added setValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
-import androidx.compose.material.icons.filled.Delete // [FIX] Added Delete Icon
-import androidx.compose.material3.SwipeToDismissBox // [FIX] Added
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.ui.Alignment
@@ -57,16 +57,16 @@ fun GlassPlaylistOverlay(
     edgeWidth: Float = LiquidGlassDefaults.EdgeWidth,
     addToPlaylistMode: Boolean = false,
     songsToAdd: List<com.vagueplayer.music.data.model.Song> = emptyList(),
-    customListMode: Boolean = false, // [NEW]
-    customSongs: List<com.vagueplayer.music.data.model.Song> = emptyList(), // [NEW]
-    customTitle: String? = null, // [NEW]
-    hazeState: dev.chrisbanes.haze.HazeState? = null // [FIX] Add Haze
+    customListMode: Boolean = false,
+    customSongs: List<com.vagueplayer.music.data.model.Song> = emptyList(),
+    customTitle: String? = null,
+    hazeState: dev.chrisbanes.haze.HazeState? = null
 ) {
     val currentQueue by viewModel.currentQueue.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
     val playlists by viewModel.userPlaylists.collectAsState()
 
-    // [NEW] Predictive Back
+    // Predictive Back
     var backProgress by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     
     androidx.activity.compose.PredictiveBackHandler(enabled = isVisible) { progress ->
@@ -103,6 +103,7 @@ fun GlassPlaylistOverlay(
                                 .hazeChild(
                                     state = hazeState, 
                                     style = HazeStyle(
+                                        backgroundColor = Color.White,
                                         blurRadius = 30.dp,
                                         tint = HazeTint(Color.White.copy(alpha = 0.5f)), // Stronger tint for overlay
                                         noiseFactor = 0.05f
@@ -201,7 +202,7 @@ fun GlassPlaylistOverlay(
                             }
 
                             } else if (customListMode) {
-                             // [NEW] Custom List Mode (Favorites / Recents / Removed)
+                             // Custom List Mode (Favorites / Recents / Removed)
                              itemsIndexed(customSongs) { index, song ->
                                 Row(
                                     modifier = Modifier
@@ -320,7 +321,7 @@ fun GlassPlaylistOverlay(
                                                 .padding(horizontal = 20.dp),
                                             contentAlignment = Alignment.CenterEnd
                                         ) {
-                                            // [FIX] Hide icon if not swiping (prevent ghosting through transparent content)
+                                            // Hide icon if not swiping (prevent ghosting through transparent content)
                                             val iconAlpha by androidx.compose.animation.core.animateFloatAsState(
                                                 targetValue = if (dismissState.targetValue == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) 1f else 0f,
                                                 label = "IconAlpha"

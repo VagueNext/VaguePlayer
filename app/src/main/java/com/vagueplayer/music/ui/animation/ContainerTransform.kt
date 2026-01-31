@@ -9,20 +9,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset 
-import androidx.compose.ui.unit.IntOffset // [NEW]
-import kotlin.math.roundToInt // [NEW]
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.* // [FIX] Includes mutableFloatStateOf, remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer // [NEW]
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.compose.foundation.gestures.draggable // [NEW]
-import androidx.compose.foundation.gestures.rememberDraggableState // [FIX] Added
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import com.vagueplayer.music.ui.theme.AnimationUtils
 
 /**
@@ -55,7 +55,7 @@ fun SharedTransitionScope.ExpandableContainer(
     containerColor: Color = Color.White,
     scrimColor: Color = Color.Black.copy(alpha = 0.3f),
     cornerRadius: Dp = 28.dp, // Default "Big" corner radius
-    renderInOverlay: Boolean = true, // [NEW] Control parameter
+    renderInOverlay: Boolean = true, // Control parameter
     content: @Composable AnimatedVisibilityScope.() -> Unit
 ) {
     // 1. Scrim (Removed as per user request)
@@ -182,7 +182,7 @@ fun Modifier.transformSource(
     key: String,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    renderInOverlay: Boolean = false // [SAFETY] Default to FALSE to prevent LazyGrid crashes globally
+    renderInOverlay: Boolean = false // Default to FALSE to prevent LazyGrid crashes globally
 ): Modifier = with(sharedTransitionScope) {
     this@transformSource.sharedBounds(
         sharedContentState = rememberSharedContentState(key = key),

@@ -19,19 +19,19 @@ import android.graphics.Shader as nativeShader
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp // [FIX] Import
-import androidx.compose.foundation.background // [FIX] Import
-import androidx.compose.ui.draw.clip // [FIX] Import
-import org.intellij.lang.annotations.Language // [FIX] Import
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import org.intellij.lang.annotations.Language
 
 /**
  * Global Defaults for Liquid Glass Visuals
  */
 object LiquidGlassDefaults {
     val BlurRadius = 0.dp
-    val EdgeWidth = 30.0f // [Visual] Increased from 15f
-    val DistortionStrength = 45.0f // [Visual] Increased from 15f
-    val Tint = Color.White.copy(alpha = 0.2f) // [Visual] Increased from 0.02f for visibility
+    val EdgeWidth = 30.0f
+    val DistortionStrength = 45.0f
+    val Tint = Color.White.copy(alpha = 0.2f)
     val CornerRadius = 32.dp
 }
 
@@ -46,14 +46,14 @@ val WaterDropGlassShader = """
     uniform float4 uBounds1; // Player
     uniform float4 uBounds2; // Nav Pill
     uniform float4 uBounds3; // Search Orb
-    uniform float4 uBounds4; // [NEW] Transient Overlay (Menus/Dialogs)
+    uniform float4 uBounds4; // Transient Overlay (Menus/Dialogs)
     uniform float4 uCommonBounds; // Bounding box of all 4
     
     uniform float uCornerRadius; 
     uniform float uEdgeWidth;
     uniform float uDistortionStrength;
-    uniform float uAberrationStrength; // [FIX] Missing uniform
-    uniform float uFusionStrength; // [NEW] Controls the "stickiness" or surface tension
+    uniform float uAberrationStrength;
+    uniform float uFusionStrength; // Controls the "stickiness" or surface tension
     layout(color) uniform half4 uTint;
 
     float sdRoundedBox(float2 p, float2 b, float r) {
@@ -67,13 +67,13 @@ val WaterDropGlassShader = """
         float2 size = float2(rect.z - rect.x, rect.w - rect.y);
         float2 center = float2(rect.x + size.x * 0.5, rect.y + size.y * 0.5);
         
-        // [FIX] Clamp radius to ensure capsule/circle shape even if uniform is too large
+        // Clamp radius to ensure capsule/circle shape even if uniform is too large
         float safeRadius = min(r, min(size.x, size.y) * 0.5);
         
         return sdRoundedBox(p - center, size * 0.5, safeRadius);
     }
 
-    // [NEW] Smooth Minimum (Metaball/Liquid Fusion)
+    // Smooth Minimum (Metaball/Liquid Fusion)
     // k = fusion strength (smoothness factor)
     float smin(float a, float b, float k) {
         // Polynomial smin (classic)
@@ -83,7 +83,7 @@ val WaterDropGlassShader = """
     
     // Helper to sample combined SDF from all bounds
     float getCombinedDist(float2 p) {
-        // [FIX] Combine 4 bounds using Smooth Min
+        // Combine 4 bounds using Smooth Min
         float d1 = boxSDF(p, uBounds1, uCornerRadius);
         float d2 = boxSDF(p, uBounds2, uCornerRadius);
         float d3 = boxSDF(p, uBounds3, uCornerRadius);
@@ -142,7 +142,7 @@ val WaterDropGlassShader = """
         float mask = 1.0 - step(0.0, d); 
 
         // Distortion (Magnify/Stretch)
-        // [FIX] Invert direction: Sample from INSIDE (magnify), do not pull outside pixels in.
+        // Invert direction: Sample from INSIDE (magnify), do not pull outside pixels in.
         // Previously: normal * ... (points out) -> samples outside.
         // Now: -normal * ... (points in) -> samples inside.
         float2 distortion = -normal * lensProfile * uDistortionStrength * mask;
@@ -160,15 +160,15 @@ val WaterDropGlassShader = """
         color.a = content.eval(samplePos).a;
 
         // Specular Ridge (Lighting) - Modeled Physics
-        float3 lightDir = normalize(float3(0.0, 0.0, 1.0)); // [FIX] Frontal light to avoid edge glare
+        float3 lightDir = normalize(float3(0.0, 0.0, 1.0)); // Frontal light to avoid edge glare
         float3 viewDir = float3(0.0, 0.0, 1.0);
         float3 surfaceNormal = normalize(float3(normal * lensProfile * 2.0, 1.0)); 
  
         float NdotL = max(0.0, dot(surfaceNormal, lightDir));
-        float specular = 0.0; // [FIX] Removed white glare completely
+        float specular = 0.0;
         
         // Fresnel/Rim Light
-        float fresnel = 0.0; // [FIX] Removed rim light completely
+        float fresnel = 0.0;
 
         half3 finalColor = color.rgb;
         finalColor += specular;
@@ -192,13 +192,13 @@ fun Modifier.liquidGlassLens(
     bounds1: Rect? = null,
     bounds2: Rect? = null,
     bounds3: Rect? = null,
-    bounds4: Rect? = null, // [NEW] Transient Overlay
+    bounds4: Rect? = null,
     cornerRadius: Dp = LiquidGlassDefaults.CornerRadius,
     distortionStrength: Float = LiquidGlassDefaults.DistortionStrength,
     edgeWidth: Float = LiquidGlassDefaults.EdgeWidth,
     aberrationStrength: Float = 1.0f,
     tint: Color = LiquidGlassDefaults.Tint,
-    fusionStrength: Float = 25.0f, // [NEW] Default Fusion Strength
+    fusionStrength: Float = 25.0f,
     enableShader: Boolean = true
 ): Modifier = composed {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !enableShader) {
@@ -221,7 +221,7 @@ fun Modifier.liquidGlassLens(
         shader.setFloatUniform("uEdgeWidth", edgeWidth)
         shader.setFloatUniform("uAberrationStrength", aberrationStrength)
         shader.setFloatUniform("uCornerRadius", cornerRadius.toPx())
-        shader.setFloatUniform("uFusionStrength", fusionStrength) // [NEW] Pass to shader
+        shader.setFloatUniform("uFusionStrength", fusionStrength)
         
         // Pass Bounds (x, y, w, h)
         // Slot 1
@@ -281,7 +281,7 @@ fun Modifier.simpleGlass(
     tint: Color = LiquidGlassDefaults.Tint,
     edgeWidth: Float = LiquidGlassDefaults.EdgeWidth,
     distortionStrength: Float = LiquidGlassDefaults.DistortionStrength,
-    blurRadius: Dp = 0.dp, // [NEW] Supports Gaussian Blur
+    blurRadius: Dp = 0.dp,
     aberrationStrength: Float = 0f,
     enableShader: Boolean = true
 ): Modifier = composed {
@@ -313,7 +313,7 @@ fun Modifier.simpleGlass(
         shader.setFloatUniform("uEdgeWidth", safeEdgeWidth)
         shader.setFloatUniform("uDistortionStrength", distortionStrength)
         shader.setFloatUniform("uAberrationStrength", aberrationStrength)
-        // [FIX] Pass transparent to shader to avoid "dirty" sampling artifacts.
+        // Pass transparent to shader to avoid "dirty" sampling artifacts.
         // The color is now handled by the .drawWithContent { } Glaze pass below.
         shader.setColorUniform("uTint", Color.Transparent.toArgb())
 
@@ -343,7 +343,7 @@ fun Modifier.simpleGlass(
             if (tint.alpha > 0f) {
                 drawRect(
                     color = tint, 
-                    blendMode = BlendMode.SrcAtop // [FIX] SrcAtop ensures tint only draws on top of existing non-transparent pixels, preventing white halo on blurred edges
+                    blendMode = BlendMode.SrcAtop // SrcAtop ensures tint only draws on top of existing non-transparent pixels, preventing white halo on blurred edges
                 )
             }
         }

@@ -118,7 +118,7 @@ fun GlassProgressSlider(
         val safeOffsetX = if (offsetX.isNaN()) 0f else offsetX
 
         // Active Track Alignment
-        // [FIX] Extend active track to the CENTER of the thumb (or full cover) to avoid gap
+        // Extend active track to the CENTER of the thumb (or full cover) to avoid gap
         val activeTrackWidthPx = centerPos // Was offsetX
         val activeTrackWidth = with(LocalDensity.current) { activeTrackWidthPx.toDp() }
         val currentTrackScale = if (effectiveInteracting) 1.5f else 1.0f
@@ -171,7 +171,7 @@ fun GlassTrack(
                 .width(activeTrackWidth)
                 .height(animatedTrackHeight)
                 .align(Alignment.CenterStart)
-                .clip(RoundedCornerShape(100)) // [FIX] Rounded ends for active track
+                .clip(RoundedCornerShape(100)) // Rounded ends for active track
                 .background(Color.White)
         )
     }
