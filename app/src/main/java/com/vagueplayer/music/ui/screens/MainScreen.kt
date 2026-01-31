@@ -1491,14 +1491,13 @@ fun MainScreen() {
     // Moved here to ensure it closes BEFORE PlayerScreen if both are open.
 // Playlist Global Overlay (Highest Priority for Overlay Stack)
     // Directly render; component handles internal AnimatedVisibility
-    if (showPlaylistGlobal) {
-        com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
-             viewModel = audioViewModel,
-             isVisible = true, 
-             onDismiss = { showPlaylistGlobal = false },
-             hazeState = mainHazeState
-        )
-    }
+    // Playlist Global Overlay (Highest Priority for Overlay Stack)
+    // Directly render; component handles internal AnimatedVisibility
+    com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
+         viewModel = audioViewModel,
+         isVisible = showPlaylistGlobal, 
+         onDismiss = { showPlaylistGlobal = false }
+    )
     BackHandler(enabled = showPlaylistGlobal) { showPlaylistGlobal = false }
     } // End Root Box (contains both Haze Box and Dialog Layer as siblings)
     } // End SharedTransitionLayout

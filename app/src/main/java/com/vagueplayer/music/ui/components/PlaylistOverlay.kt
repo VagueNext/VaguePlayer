@@ -60,7 +60,7 @@ fun GlassPlaylistOverlay(
     customListMode: Boolean = false,
     customSongs: List<com.vagueplayer.music.data.model.Song> = emptyList(),
     customTitle: String? = null,
-    hazeState: dev.chrisbanes.haze.HazeState? = null
+    // hazeState removed to force AGSL
 ) {
     val currentQueue by viewModel.currentQueue.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
