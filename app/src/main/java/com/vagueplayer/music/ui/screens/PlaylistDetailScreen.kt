@@ -148,17 +148,28 @@ fun SharedTransitionScope.PlaylistDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .sharedBounds(
-                    sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(ContentScale.FillWidth)
-                )
                 .onGloballyPositioned { rootLayoutCoordinates = it }
         ) {
+            // Shared Background Layer - Decoupled from Content
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
+                        resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(ContentScale.FillWidth)
+                    )
+                    .background(MaterialTheme.colorScheme.background)
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .animateEnterExit(
+                         enter = slideInVertically { it / 4 } + fadeIn(),
+                         exit = fadeOut()
+                    )
                     .liquidGlassLens(
                         bounds1 = backButtonBounds,
                         bounds2 = sortButtonBounds,

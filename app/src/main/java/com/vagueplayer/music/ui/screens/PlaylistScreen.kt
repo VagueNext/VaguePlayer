@@ -139,7 +139,7 @@ fun SharedTransitionScope.PlaylistCard(
     onLongClick: () -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .bouncyClickable(
@@ -147,57 +147,69 @@ fun SharedTransitionScope.PlaylistCard(
                 onClick = onClick,
                 onLongClick = onLongClick
              )
-            .sharedBounds(
-                sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
-                animatedVisibilityScope = animatedVisibilityScope,
-                boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(ContentScale.FillWidth),
-                clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp))
-            )
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
     ) {
+        // Shared Container Background (Decoupled)
         Box(
             modifier = Modifier
-                .aspectRatio(1f)
-                .sharedElement(
-                    state = rememberSharedContentState(key = "cover_${playlist.id}"),
+                .matchParentSize()
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
+                    boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(ContentScale.FillWidth),
+                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp))
                 )
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.White)
+        )
+
+        // Content Layer
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp)) // Clip content to match card shape
+                // No background here, using shared background
         ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(playlist.songs.firstOrNull()?.albumArtUri)
-                    .crossfade(false)
-                    .memoryCacheKey("cover_${playlist.id}")
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+            Box(
+                modifier = Modifier
+                    .aspectRatio(1f)
+                    .sharedElement(
+                        state = rememberSharedContentState(key = "cover_${playlist.id}"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
+                    )
+                    .background(MaterialTheme.colorScheme.surfaceVariant) // Placeholder background for image
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(playlist.songs.firstOrNull()?.albumArtUri)
+                        .crossfade(false)
+                        .memoryCacheKey("cover_${playlist.id}")
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-        // 2. Text Info (Outside Shared Bounds for cleaner text fade)
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text(
-                text = playlist.name,
-                fontSize = 17.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                maxLines = 1,
-                modifier = Modifier // Removed nested sharedBounds
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${playlist.songs.size} 首歌曲",
-                fontSize = 14.sp,
-                color = Color.Gray,
-                maxLines = 1
-            )
+            // 2. Text Info
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(
+                    text = playlist.name,
+                    fontSize = 17.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    maxLines = 1,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${playlist.songs.size} 首歌曲",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
