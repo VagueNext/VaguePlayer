@@ -139,7 +139,7 @@ fun SharedTransitionScope.PlaylistDetailScreen(
     Surface(
         modifier = Modifier
             .fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         // Content Container
         Box(
@@ -155,7 +155,8 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                         sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
                         animatedVisibilityScope = animatedVisibilityScope,
                         boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds
+                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                        renderInOverlayDuringTransition = false
                     )
                     .background(MaterialTheme.colorScheme.background)
             )
@@ -172,11 +173,17 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                     contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
                     // 1. Header Image
+                    // 1. Header Image
                     item {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(250.dp)
+                                .sharedElement(
+                                    state = rememberSharedContentState(key = "cover_${playlist.id}"),
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
+                                )
                         ) {
                             // Background Blur Image
                             AsyncImage(
@@ -189,11 +196,6 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .sharedElement(
-                                        state = rememberSharedContentState(key = "cover_${playlist.id}"),
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
-                                    )
                             )
                         }
                     }
@@ -203,7 +205,6 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color.White)
                                 .padding(top = 24.dp, start = 24.dp, end = 24.dp)
                         ) {
                             Row(

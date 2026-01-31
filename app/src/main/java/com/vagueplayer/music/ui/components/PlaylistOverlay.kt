@@ -101,6 +101,7 @@ fun GlassPlaylistOverlay(
                          distortionStrength = 60f, // Increased for visibility
                          edgeWidth = 40f // Increased for visibility
                      )
+                     .background(Color.White.copy(alpha = 0.4f)) // Ensure visible tint
                     .clickable(enabled = false) {}
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
