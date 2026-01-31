@@ -155,7 +155,8 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                         sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
                         animatedVisibilityScope = animatedVisibilityScope,
                         boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds
+                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                        renderInOverlayDuringTransition = false
                     )
                     .background(MaterialTheme.colorScheme.background)
             )
