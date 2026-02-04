@@ -354,6 +354,14 @@ fun MainScreen() {
                 .nestedScroll(nestedScrollConnection) 
         ) {
         
+         // Animate distortion strength: Fade out when Player is open to prevent full-screen glitch
+        val targetDistortion = if (showPlayer) 0f else 45f
+        val animatedDistortion by animateFloatAsState(
+            targetValue = targetDistortion,
+            animationSpec = tween(300), 
+            label = "glassDistortion"
+        )
+
         // WRAPPER BOX for Content
         Box(
              modifier = Modifier
@@ -363,7 +371,7 @@ fun MainScreen() {
                     bounds2 = navBounds,
                     bounds3 = searchBounds,
                     bounds4 = overlayBounds,
-                    distortionStrength = 45f, 
+                    distortionStrength = animatedDistortion, 
                     edgeWidth = 60f,
                     fusionStrength = 35f,
                     aberrationStrength = 0.3f,

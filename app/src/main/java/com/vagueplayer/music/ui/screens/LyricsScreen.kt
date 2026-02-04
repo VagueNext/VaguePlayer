@@ -413,72 +413,87 @@ fun KaraokeLine(
         verticalArrangement = Arrangement.Center
     ) {
         if (syllables != null && syllables.isNotEmpty()) {
-            // --- SYLLABLE MODE (Progressive Gradient Fill) ---
+            // --- SYLLABLE MODE (Progressive Gradient Fill + Per-Character Animation) ---
             syllables.forEachIndexed { index, (startTime, syllableText) ->
                 val nextTimestamp = if (index < syllables.size - 1) syllables[index + 1].first else (startTime + 500)
                 val duration = (nextTimestamp - startTime).coerceAtLeast(1)
                 
-                // Calculate fill progress for this SPECIFIC syllable
-                // < 0: Not started
-                // 0..1: Filling
-                // > 1: Filled
-                val syllableProgress = ((currentTime - startTime).toFloat() / duration).coerceIn(0f, 1f)
-                
-                val isActive = currentTime in startTime until nextTimestamp
-                val isPassed = currentTime >= nextTimestamp
-                
-                // --- ANIMATION SPECS ---
-                // Scale: 1.06f (Reduced)
-                // Lift: -6.dp (~16px) (Increased)
-                
-                val targetScale = if (isActive) 1.06f else 1.0f 
-                val targetOffsetY = if (isActive) -6f else 0f 
-                
-                val animatedScale by animateFloatAsState(
-                    targetValue = targetScale,
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
-                    label = "sylScale"
-                )
-                
-                val animatedOffsetY by animateFloatAsState(
-                    targetValue = targetOffsetY,
-                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 300f),
-                    label = "sylOffset"
-                )
+                // Use a Row to keep the syllable (word) together, preventing wrapping mid-word
+                Row(
+                    modifier = Modifier.padding(end = 4.dp), 
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    val chars = syllableText.toList()
+                    val charDuration = duration / chars.size.coerceAtLeast(1)
+                    
+                    chars.forEachIndexed { charIndex, char ->
+                        // Interpolate time for this specific character
+                        val charStartTime = startTime + (charIndex * charDuration)
+                        val charNextTime = charStartTime + charDuration
+                        
+                        // Per-Character Interaction Logic
+                        val isCharActive = currentTime in charStartTime until charNextTime
+                        val isCharPassed = currentTime >= charNextTime
+                        
+                        // --- ANIMATION SPECS ---
+                        // Scale: 1.04f (Reduced further)
+                        // Lift: -6f (Per character)
+                        
+                        val targetScale = if (isCharActive) 1.04f else 1.0f 
+                        val targetOffsetY = if (isCharActive || isCharPassed) -6f else 0f 
+                        
+                        val animatedScale by animateFloatAsState(
+                            targetValue = targetScale,
+                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 150f), // Smoother/Slower
+                            label = "charScale"
+                        )
+                        
+                        val animatedOffsetY by animateFloatAsState(
+                            targetValue = targetOffsetY,
+                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 150f),
+                            label = "charOffset"
+                        )
+                        
+                        // Determine progress for this specific CHAR
+                        // This handles the gradient fill "per character" if we wanted, 
+                        // but user specifically asked for "Lift" to be per character.
+                        // For the Gradient Fill:
+                        // We still want the "Liquid" fill to flow through the character?
+                        // Or efficiently fill the character?
+                        // If we use the GLOBAL brush on the syllable, we need to map coordinates.
+                        // Simpler: Calculate "Local Progress" for the character 0..1 based on Char Time
+                        val charProgress = ((currentTime - charStartTime).toFloat() / charDuration).coerceIn(0f, 1f)
+                        
+                         val brush = Brush.horizontalGradient(
+                            0.0f to Color.White,
+                            charProgress to Color.White,
+                            charProgress.coerceAtMost(0.999f) + 0.001f to Color.White.copy(alpha = 0.5f),
+                            1.0f to Color.White.copy(alpha = 0.5f)
+                        )
 
-                // Progressive Gradient Brush
-                // We want a sharp transition from White to Transparent/DimWhite
-                // e.g. 0.5 -> Stop at 0.5 white, 0.501 dim
-                val brush = Brush.horizontalGradient(
-                    0.0f to Color.White,
-                    syllableProgress to Color.White,
-                    syllableProgress.coerceAtMost(0.999f) + 0.001f to Color.White.copy(alpha = 0.5f),
-                    1.0f to Color.White.copy(alpha = 0.5f)
-                )
-
-                Text(
-                    text = syllableText,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    style = androidx.compose.ui.text.TextStyle(
-                        brush = brush, // Apply Gradient Fill
-                        shadow = if (isActive) androidx.compose.ui.graphics.Shadow(
-                            color = Color.White.copy(alpha = 0.5f),
-                            blurRadius = 12f 
-                        ) else null
-                    ),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .padding(end = 1.dp)
-                        .graphicsLayer {
-                            scaleX = animatedScale
-                            scaleY = animatedScale
-                            translationY = animatedOffsetY
-                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.8f) 
-                            // Ensure alpha is 1f because we use Brush for opacity
-                            alpha = 1f 
-                        }
-                )
+                        Text(
+                            text = char.toString(),
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            style = androidx.compose.ui.text.TextStyle(
+                                brush = brush, 
+                                shadow = if (isCharActive) androidx.compose.ui.graphics.Shadow(
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    blurRadius = 8f // Reduced blur
+                                ) else null
+                            ),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    scaleX = animatedScale
+                                    scaleY = animatedScale
+                                    translationY = animatedOffsetY
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f) // Left-Bottom Pivot? "Left big right small"ish
+                                    alpha = 1f 
+                                }
+                        )
+                    }
+                }
             }
         
         } else {
@@ -498,19 +513,20 @@ fun KaraokeLine(
                 val localProgress = ((lineProgress - charStart) / (charEnd - charStart)).coerceIn(0f, 1f)
                 
                 val isActive = localProgress > 0f && localProgress < 1f
-                // val isPassed = localProgress >= 1f
+                val isPassed = localProgress >= 1f
                 
-                val targetScale = if (isActive) 1.06f else 1.0f
-                val targetOffsetY = if (isActive) -6f else 0f
+                val targetScale = if (isActive) 1.04f else 1.0f
+                val targetOffsetY = if (isActive || isPassed) -6f else 0f
                 
                 val animatedScale by animateFloatAsState(
                     targetValue = targetScale,
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
-                    label = "charScale"
+                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 150f),
+                    label = "scale"
                 )
                 val animatedOffsetY by animateFloatAsState(
                     targetValue = targetOffsetY, 
-                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 300f)
+                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 150f),
+                    label = "offset"
                 )
                 
                 val brush = Brush.horizontalGradient(

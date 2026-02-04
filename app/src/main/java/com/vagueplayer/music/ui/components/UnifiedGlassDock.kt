@@ -76,6 +76,7 @@ fun UnifiedGlassDock(
                 .then(playerContainerModifier), 
             contentAlignment = Alignment.Center
             ) {
+                // Layer 1: Glass Background
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -84,6 +85,13 @@ fun UnifiedGlassDock(
                             cornerRadius = 19.dp,
                             enableShader = true
                         )
+                )
+
+                // Layer 2: Content
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(19.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
