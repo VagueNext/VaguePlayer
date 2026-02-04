@@ -544,7 +544,7 @@ class AudioViewModel(
                  
                  updateCurrentSongFromController()
                  
-                 // [PREEMPTIVE SHUFFLE] When landing on the last song, reshuffle others
+                 // [PREEMPTIVE SHUFFLE] When landing on the last song, reshuffle
                  val controller = mediaController ?: return
                  val currentIndex = controller.currentMediaItemIndex
                  val timeline = controller.currentTimeline
@@ -554,21 +554,27 @@ class AudioViewModel(
                      val nextIndex = timeline.getNextWindowIndex(currentIndex, Player.REPEAT_MODE_OFF, true)
                      val isCurrentLastSong = (nextIndex == androidx.media3.common.C.INDEX_UNSET)
                      
-                     // When we land on the last song (and weren't there before), reshuffle
+                     // When we land on the last song (and weren't there before), force reshuffle
                      if (isCurrentLastSong && !wasOnLastSong) {
-                          android.util.Log.d("SmartShuffle", "Reached last song (pos $currentIndex). Preemptive reshuffle...")
+                          android.util.Log.d("SmartShuffle", "Reached last song (pos $currentIndex). Force reshuffle...")
                           viewModelScope.launch {
-                              // Move current song to position 0, then reshuffle
-                              controller.moveMediaItem(currentIndex, 0)
-                              kotlinx.coroutines.delay(100) // Small delay to let move complete
+                              // Save current playlist
+                              val items = mutableListOf<MediaItem>()
+                              for (i in 0 until timeline.windowCount) {
+                                  val window = androidx.media3.common.Timeline.Window()
+                                  timeline.getWindow(i, window)
+                                  items.add(window.mediaItem)
+                              }
                               
-                              // Toggle shuffle to reshuffle the remaining songs
-                              controller.shuffleModeEnabled = false
-                              kotlinx.coroutines.delay(150)
-                              controller.shuffleModeEnabled = true
+                              // Clear and re-add to force new shuffle seed
+                              controller.clearMediaItems()
+                              kotlinx.coroutines.delay(50)
+                              controller.setMediaItems(items)
+                              controller.prepare()
+                              controller.play()
                               
                               updateCurrentQueueFromController()
-                              android.util.Log.d("SmartShuffle", "Preemptive reshuffle complete. Current song now at front.")
+                              android.util.Log.d("SmartShuffle", "Forced reshuffle complete. New order generated.")
                           }
                      }
                      
@@ -613,27 +619,16 @@ class AudioViewModel(
         }
 
         val queue = mutableListOf<MediaItem>()
-        // Reconstruct queue based on shuffle mode
-        if (controller.shuffleModeEnabled) {
-            // In shuffle mode, we traverse the timeline in shuffled order
-            var index = timeline.getFirstWindowIndex(true) // shuffleMode=true
-            while (index != androidx.media3.common.C.INDEX_UNSET) {
-                val mediaItem = timeline.getWindow(index, androidx.media3.common.Timeline.Window()).mediaItem
-                queue.add(mediaItem)
-                index = timeline.getNextWindowIndex(index, Player.REPEAT_MODE_OFF, true)
-            }
-        } else {
-            // Linear order
-            for (i in 0 until timeline.windowCount) {
-                val mediaItem = timeline.getWindow(i, androidx.media3.common.Timeline.Window()).mediaItem
-                queue.add(mediaItem)
-            }
+        // Always show queue in original (linear) order, even in shuffle mode
+        for (i in 0 until timeline.windowCount) {
+            val mediaItem = timeline.getWindow(i, androidx.media3.common.Timeline.Window()).mediaItem
+            queue.add(mediaItem)
         }
         
-        // Log first 3 songs to verify order change
+        // Log first 3 songs to verify order
         if (queue.isNotEmpty()) {
              val preview = queue.take(3).joinToString { it.mediaMetadata.title.toString() }
-             android.util.Log.d("SmartShuffle", "Queue Updated. Size: ${queue.size}. Top 3: $preview")
+             android.util.Log.d("SmartShuffle", "Queue Updated (Linear Order). Size: ${queue.size}. Top 3: $preview")
         }
         
         _currentQueue.value = queue.map { item ->
