@@ -544,7 +544,7 @@ class AudioViewModel(
                  
                  updateCurrentSongFromController()
                  
-                 // [SMART SHUFFLE] Detect loop and refresh
+                 // [PREEMPTIVE SHUFFLE] When landing on the last song, reshuffle others
                  val controller = mediaController ?: return
                  val currentIndex = controller.currentMediaItemIndex
                  val timeline = controller.currentTimeline
@@ -554,15 +554,21 @@ class AudioViewModel(
                      val nextIndex = timeline.getNextWindowIndex(currentIndex, Player.REPEAT_MODE_OFF, true)
                      val isCurrentLastSong = (nextIndex == androidx.media3.common.C.INDEX_UNSET)
                      
-                     // If we WERE on the last song and NOW we're NOT (loop detected), refresh
-                     if (wasOnLastSong && !isCurrentLastSong) {
-                          android.util.Log.d("SmartShuffle", "Loop detected: Was on last, now on pos $currentIndex. Refreshing...")
+                     // When we land on the last song (and weren't there before), reshuffle
+                     if (isCurrentLastSong && !wasOnLastSong) {
+                          android.util.Log.d("SmartShuffle", "Reached last song (pos $currentIndex). Preemptive reshuffle...")
                           viewModelScope.launch {
+                              // Move current song to position 0, then reshuffle
+                              controller.moveMediaItem(currentIndex, 0)
+                              kotlinx.coroutines.delay(100) // Small delay to let move complete
+                              
+                              // Toggle shuffle to reshuffle the remaining songs
                               controller.shuffleModeEnabled = false
-                              kotlinx.coroutines.delay(300)
+                              kotlinx.coroutines.delay(150)
                               controller.shuffleModeEnabled = true
+                              
                               updateCurrentQueueFromController()
-                              android.util.Log.d("SmartShuffle", "Shuffle refreshed.")
+                              android.util.Log.d("SmartShuffle", "Preemptive reshuffle complete. Current song now at front.")
                           }
                      }
                      
