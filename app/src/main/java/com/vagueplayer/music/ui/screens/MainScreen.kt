@@ -221,6 +221,11 @@ fun MainScreen() {
     var showSelectionMenu by remember { mutableStateOf(false) }
     var playlistMenuAnchor by remember { mutableStateOf(Offset.Zero) }
 
+    // Playlist Context Menu (Long Click)
+    var showPlaylistContextMenu by remember { mutableStateOf(false) }
+    var activePlaylistForContextMenu by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
+    var playlistContextMenuAnchor by remember { mutableStateOf(Offset.Zero) }
+
     // Hoisted Repeat Menu State
     var showRepeatMenu by remember { mutableStateOf(false) }
     var repeatMenuAnchor by remember { mutableStateOf(Offset.Zero) }
@@ -557,6 +562,15 @@ fun MainScreen() {
                                                     onPlaylistClick = { playlist -> 
                                                         selectedPlaylist = playlist 
                                                     },
+                                                    onContextMenuRequest = { playlist, offset ->
+                        // User Request: Direct Delete Dialog on Long Press (Skipping Menu)
+                        // activePlaylistForContextMenu = playlist
+                        // playlistContextMenuAnchor = offset
+                        // showPlaylistContextMenu = true
+                        
+                        // Direct Delete
+                        audioViewModel.requestDeletePlaylist(playlist)
+                    },
                                                     hazeState = mainHazeState,
                                                     animatedVisibilityScope = avScope,
                                                     onSongMenuRequest = { song, offset, size ->
@@ -733,8 +747,10 @@ fun MainScreen() {
         }
         
         if (showDeleteConfirm) {
+            val isBulk = selectedIds.isNotEmpty()
+            val count = if (isBulk) selectedIds.size else 1
+            
             com.vagueplayer.music.ui.components.GlassDialog(
-                // Defaults applied automatically
                 enableShader = true,
                 hazeState = mainHazeState,
                 onDismissRequest = { 
@@ -742,13 +758,20 @@ fun MainScreen() {
                     overlayBounds = null
                 },
                 title = "确认移除?",
-                description = "选中的 ${selectedIds.size} 首歌曲将从列表中移除，但不会删除本地文件。",
+                description = "选中的 $count 首歌曲将从列表中移除，但不会删除本地文件。",
                 confirmText = "移除",
                 onConfirm = {
-                    val toDelete = songs.filter { it.id in selectedIds }
-                    audioViewModel.deleteSongs(toDelete)
+                    if (isBulk) {
+                        val toDelete = songs.filter { it.id in selectedIds }
+                        audioViewModel.deleteSongs(toDelete)
+                        audioViewModel.clearSelection() 
+                    } else {
+                        // Single Delete
+                        activeSongForMenu?.let { song ->
+                             audioViewModel.deleteSongs(listOf(song))
+                        }
+                    }
                     showDeleteConfirm = false
-                    audioViewModel.clearSelection() 
                     overlayBounds = null
                 },
                 cancelText = "取消",
@@ -764,32 +787,7 @@ fun MainScreen() {
         // 2. Player Container: Stays Opaque during Morph (Delayed Fade) to ensure "Shrink" is visible.
         
         // Unified Container Transform (Player Expand)
-        ExpandableContainer(
-            isExpanded = showPlayer,
-            key = "container_transform",
-            onDismissRequest = { 
-                showPlayer = false 
-                showRepeatMenu = false
-                showSortMenu = false
-                showPlaylistMenu = false
-                overlayBounds = null
-            },
-            modifier = Modifier.fillMaxSize(), // Target expands to Full Screen
-            // sharedTransitionScope = this@SharedTransitionLayout, // Implicit receiver
-        ) {
-            PlayerScreen(
-                sharedTransitionScope = this@SharedTransitionLayout,
-                animatedVisibilityScope = this@ExpandableContainer, // Scope from ExpandableContainer's internal AnimatedVisibility
-                viewModel = audioViewModel,
-                onDismiss = { showPlayer = false },
-                onTogglePlaylist = { showPlaylistGlobal = true },
-                onShowRepeatMenu = { anchor ->
-                    repeatMenuAnchor = anchor
-                    showRepeatMenu = true
-                },
-                isOverlayVisible = isAnyOverlayVisible
-            )
-        }
+
 
 
 
@@ -885,10 +883,34 @@ fun MainScreen() {
 
 
 
-        
 
 
-
+        // Unified Container Transform (Player Expand)
+        ExpandableContainer(
+            isExpanded = showPlayer,
+            key = "container_transform",
+            onDismissRequest = { 
+                showPlayer = false 
+                showRepeatMenu = false
+                showSortMenu = false
+                showPlaylistMenu = false
+                overlayBounds = null
+            },
+            modifier = Modifier.fillMaxSize(), 
+        ) {
+            PlayerScreen(
+                sharedTransitionScope = this@SharedTransitionLayout,
+                animatedVisibilityScope = this@ExpandableContainer,
+                viewModel = audioViewModel,
+                onDismiss = { showPlayer = false },
+                onTogglePlaylist = { showPlaylistGlobal = true },
+                onShowRepeatMenu = { anchor ->
+                    repeatMenuAnchor = anchor
+                    showRepeatMenu = true
+                },
+                isOverlayVisible = isAnyOverlayVisible
+            )
+        }
 
         // Hoisted Sort Menu Overlay
         com.vagueplayer.music.ui.components.MorphingGlassMenu(
@@ -1183,6 +1205,38 @@ fun MainScreen() {
 
 
 
+
+        // Playlist Context Menu (Detailed actions like Delete)
+        com.vagueplayer.music.ui.components.PlaylistContextMenu(
+            isExpanded = showPlaylistContextMenu,
+            playlist = activePlaylistForContextMenu,
+            anchorSize = androidx.compose.ui.unit.DpSize(0.dp, 0.dp), // Check exact size if needed, but 0 is safe for point anchor
+            anchorPosition = playlistContextMenuAnchor,
+            hazeState = mainHazeState,
+            onLayoutCoordinates = { overlayBounds = it.boundsInRoot() },
+            onRename = { playlist ->
+                // Typically rename is inside Detail Screen, but we can do it here if needed.
+                // For now, let's just open the detail screen in "Rename Mode" or ignored?
+                // Or implementing a global rename dialog.
+                // Given time constraints, maybe just enter the playlist? 
+                // Actually the user wants "Delete".
+                
+                // Let's implement full Rename Dialog if we have time, or just ignore for now?
+                // The Detail Screen has logic.
+                selectedPlaylist = playlist
+                showPlaylistContextMenu = false
+            },
+            onExport = { playlist ->
+                // Export Logic
+                showPlaylistContextMenu = false
+            },
+            onDelete = { playlist ->
+                audioViewModel.requestDeletePlaylist(playlist)
+                showPlaylistContextMenu = false
+            },
+            onDismiss = { showPlaylistContextMenu = false }
+        )
+
         // Song Action Menu
         com.vagueplayer.music.ui.components.SongActionMenu(
             isExpanded = showSongMenu,
@@ -1201,8 +1255,26 @@ fun MainScreen() {
                 showAddToPlaylist = true
             },
             onDelete = { song ->
-                activeSongForMenu = song
-                showDeleteConfirm = true
+                showSongMenu = false
+                if (selectedPlaylist != null) {
+                    // Context: Inside Playlist -> Remove from Playlist
+                    audioViewModel.removeSongFromPlaylist(selectedPlaylist!!, song)
+                    audioViewModel.showToast("已从歌单移除")
+                } else {
+                    // Context: Library -> Delete from Library
+                    activeSongForMenu = song
+                    // Ensure tracking for single delete
+                    if (isSelectionMode && selectedIds.isNotEmpty()) {
+                         showDeleteConfirm = true
+                    } else {
+                         // Single delete without selection mode
+                         // Temporarily select it or mock selection?
+                         // Better: ViewModel.supportSingleDelete? OR:
+                         activeSongForMenu = song // We track it
+                         // Update Dialog to use activeSongForMenu if selectedIds empty
+                         showDeleteConfirm = true
+                    }
+                }
             },
             onLayoutCoordinates = { overlayBounds = it.boundsInRoot() }
         )
@@ -1233,7 +1305,7 @@ fun MainScreen() {
             com.vagueplayer.music.ui.components.GlassAlertDialog(
                 title = "删除歌单",
                 description = "确定要删除歌单 '${playlistToDelete!!.name}' 吗？",
-                icon = Icons.Default.Delete,
+                icon = null, // Removed icon to match reference style
                 confirmText = "删除",
                 cancelText = "取消",
                 hazeState = mainHazeState,

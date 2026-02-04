@@ -67,7 +67,7 @@ fun SharedTransitionScope.ExpandableContainer(
         exit = ExitTransition.None,
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(50f) 
+            .zIndex(200f) // Keep above PlaylistDetail (100f) 
     ) {
         Box(
             modifier = Modifier

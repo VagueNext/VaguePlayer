@@ -518,6 +518,9 @@ class AudioViewModel(
     val currentQueue: StateFlow<List<Song>> = _currentQueue.asStateFlow()
 
     private fun setupPlayerListener() {
+        var lastKnownIndex = -1 // Track previous index
+        var wasOnLastSong = false // Track if previous song was the last in shuffle order
+
         mediaController?.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
@@ -541,34 +544,33 @@ class AudioViewModel(
                  
                  updateCurrentSongFromController()
                  
-                 // [SMART SHUFFLE] Reshuffle at Penultimate Song
+                 // [SMART SHUFFLE] Detect loop and refresh
                  val controller = mediaController ?: return
-                 val isShuffle = _isShuffleEnabled.value
-                 val repeat = _repeatMode.value
+                 val currentIndex = controller.currentMediaItemIndex
+                 val timeline = controller.currentTimeline
                  
-                 if (isShuffle && repeat == Player.REPEAT_MODE_OFF) {
-                     val timeline = controller.currentTimeline
-                     if (!timeline.isEmpty) {
-                         val current = controller.currentMediaItemIndex
-                         // Check Next
-                         val next = timeline.getNextWindowIndex(current, Player.REPEAT_MODE_OFF, true) // Shuffle Mode
-                         
-                         if (next != androidx.media3.common.C.INDEX_UNSET) {
-                             // Check Next-Next (Penultimate Check)
-                             val nextNext = timeline.getNextWindowIndex(next, Player.REPEAT_MODE_OFF, true)
-                             
-                             if (nextNext == androidx.media3.common.C.INDEX_UNSET) {
-                                  // usage: We are at (End - 1). The 'next' song is the LAST one.
-                                  // Reshuffle NOW to append more songs seamlessly.
-                                  com.vagueplayer.music.utils.LogUtils.d("SmartShuffle", "Penultimate song detected. Reshuffling...")
-                                  
-                                  // Toggle Shuffle to Reseed
-                                  controller.shuffleModeEnabled = false
-                                  controller.shuffleModeEnabled = true
-                             }
-                         }
+                 if (_isShuffleEnabled.value && !timeline.isEmpty && timeline.windowCount > 1) {
+                     // Check if CURRENT song is the last in shuffle order
+                     val nextIndex = timeline.getNextWindowIndex(currentIndex, Player.REPEAT_MODE_OFF, true)
+                     val isCurrentLastSong = (nextIndex == androidx.media3.common.C.INDEX_UNSET)
+                     
+                     // If we WERE on the last song and NOW we're NOT (loop detected), refresh
+                     if (wasOnLastSong && !isCurrentLastSong) {
+                          android.util.Log.d("SmartShuffle", "Loop detected: Was on last, now on pos $currentIndex. Refreshing...")
+                          viewModelScope.launch {
+                              controller.shuffleModeEnabled = false
+                              kotlinx.coroutines.delay(300)
+                              controller.shuffleModeEnabled = true
+                              updateCurrentQueueFromController()
+                              android.util.Log.d("SmartShuffle", "Shuffle refreshed.")
+                          }
                      }
+                     
+                     // Update flag for next transition
+                     wasOnLastSong = isCurrentLastSong
                  }
+                 
+                 lastKnownIndex = currentIndex
             }
 
             override fun onPositionDiscontinuity(
@@ -591,32 +593,57 @@ class AudioViewModel(
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
                 _isShuffleEnabled.value = shuffleModeEnabled
+                android.util.Log.d("SmartShuffle", "onShuffleModeEnabledChanged: $shuffleModeEnabled")
             }
         })
     }
     
     private fun updateCurrentQueueFromController() {
         val controller = mediaController ?: return
-        val count = controller.mediaItemCount
-        val list = ArrayList<Song>()
-        for (i in 0 until count) {
-            val item = controller.getMediaItemAt(i)
-            // Reconstruct Song or find in library (Simplification: Reconstruct from metadata)
-            val song = Song(
+        val timeline = controller.currentTimeline
+        if (timeline.isEmpty) {
+             _currentQueue.value = emptyList()
+             return
+        }
+
+        val queue = mutableListOf<MediaItem>()
+        // Reconstruct queue based on shuffle mode
+        if (controller.shuffleModeEnabled) {
+            // In shuffle mode, we traverse the timeline in shuffled order
+            var index = timeline.getFirstWindowIndex(true) // shuffleMode=true
+            while (index != androidx.media3.common.C.INDEX_UNSET) {
+                val mediaItem = timeline.getWindow(index, androidx.media3.common.Timeline.Window()).mediaItem
+                queue.add(mediaItem)
+                index = timeline.getNextWindowIndex(index, Player.REPEAT_MODE_OFF, true)
+            }
+        } else {
+            // Linear order
+            for (i in 0 until timeline.windowCount) {
+                val mediaItem = timeline.getWindow(i, androidx.media3.common.Timeline.Window()).mediaItem
+                queue.add(mediaItem)
+            }
+        }
+        
+        // Log first 3 songs to verify order change
+        if (queue.isNotEmpty()) {
+             val preview = queue.take(3).joinToString { it.mediaMetadata.title.toString() }
+             android.util.Log.d("SmartShuffle", "Queue Updated. Size: ${queue.size}. Top 3: $preview")
+        }
+        
+        _currentQueue.value = queue.map { item ->
+            Song(
                 id = item.mediaId.toLongOrNull() ?: 0L,
                 title = item.mediaMetadata.title.toString(),
                 artist = item.mediaMetadata.artist.toString(),
                 albumArtUri = item.mediaMetadata.artworkUri ?: Uri.EMPTY,
                 contentUri = item.requestMetadata.mediaUri ?: Uri.EMPTY,
-                duration = 0L,
+                duration = 0L, // This will be updated when the song plays
                 album = "Unknown Album", // Default
                 dateAdded = 0L, // Default
                 size = 0L,
                 path = "" // Default
             )
-            list.add(song)
         }
-        _currentQueue.value = list
     }
     
     fun playFromQueue(index: Int) {
@@ -1014,6 +1041,18 @@ class AudioViewModel(
             savePlaylists()
         }
     }
+
+    // Overload for Convenience
+    fun removeSongFromPlaylist(playlist: Playlist, song: Song) {
+        removeSongFromPlaylist(playlist.id, song.id)
+    }
+
+    // Helper Toast
+    fun showToast(message: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
     
     // Remove from Queue (Current Playback)
     fun removeFromQueue(index: Int) {
@@ -1097,6 +1136,16 @@ class AudioViewModel(
         
         _currentSong.value = song
         loadLyrics(song) // Ensure lyrics are loaded immediately when playing a song
+        
+        // [SMART SHUFFLE FIX] Enforce Shuffle State for New List
+        if (_isShuffleEnabled.value) {
+            // Re-apply shuffle to valid new queue
+            controller.shuffleModeEnabled = true 
+            // Ensure we are in Repeat All to prevent stopping
+            controller.repeatMode = Player.REPEAT_MODE_ALL 
+        } else {
+             controller.shuffleModeEnabled = false
+        }
     }
 
     fun togglePlayPause() {
@@ -1148,9 +1197,9 @@ class AudioViewModel(
     fun toggleRepeatMode(forceMode: Int? = null) {
         mediaController?.let {
             val nextMode = forceMode ?: when (it.repeatMode) {
-                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL // Off -> All
+                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL // Start with All
                 Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_OFF // One -> Off
+                Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL // Loop back to All (No Off)
                 else -> Player.REPEAT_MODE_ALL
             }
             it.repeatMode = nextMode
@@ -1190,10 +1239,9 @@ class AudioViewModel(
         }
 
         val isShuffle = _isShuffleEnabled.value
-        val repeat = _repeatMode.value // Can be OFF, ONE, ALL
-        
+        val repeat = _repeatMode.value
         // Logic:
-        // 1. If currently Shuffle (regardless of repeat, but usually OFF), go to Repeat All
+        // 1. If currently Shuffle (regardless of repeat), go to Repeat All
         // 2. If Repeat All, go to Repeat One
         // 3. If Repeat One, go to Shuffle
         
@@ -1212,18 +1260,18 @@ class AudioViewModel(
                  }
                  Player.REPEAT_MODE_ONE -> {
                      // Repeat One -> Shuffle
-                     // [SMART SHUFFLE] Use REPEAT_MODE_OFF internally for Shuffle to detect end
-                     controller.repeatMode = Player.REPEAT_MODE_OFF
+                     // [SMART SHUFFLE] Use REPEAT_MODE_ALL for infinite playback
+                     controller.repeatMode = Player.REPEAT_MODE_ALL
                      controller.shuffleModeEnabled = true 
                      
-                     _repeatMode.value = Player.REPEAT_MODE_OFF
+                     _repeatMode.value = Player.REPEAT_MODE_ALL // UI shows Loop All + Shuffle
                      _isShuffleEnabled.value = true
                  }
                  else -> { 
                      // Off/Default -> Shuffle (Entry)
-                     controller.repeatMode = Player.REPEAT_MODE_OFF
+                     controller.repeatMode = Player.REPEAT_MODE_ALL
                      controller.shuffleModeEnabled = true
-                     _repeatMode.value = Player.REPEAT_MODE_OFF
+                     _repeatMode.value = Player.REPEAT_MODE_ALL
                      _isShuffleEnabled.value = true
                  }
              }
@@ -1235,56 +1283,33 @@ class AudioViewModel(
     fun setShuffleMode(enabled: Boolean) {
         _isShuffleEnabled.value = enabled
         
+        val controller = mediaController ?: return
+        
         if (enabled) {
-            val controller = mediaController ?: return
-            val currentQueue = _currentQueue.value.toMutableList()
-            if (currentQueue.isEmpty()) return
-
-            val currentSong = _currentSong.value
-            val playingIndex = if (currentSong != null) {
-                currentQueue.indexOfFirst { it.id == currentSong.id }
-            } else -1
-
-            val newQueue = if (playingIndex != -1) {
-                // Keep current song, shuffle the rest (Fisher-Yates)
-                val remaining = currentQueue.filter { it.id != currentSong!!.id }.toMutableList()
-                remaining.shuffle() // Kotlin's shuffle uses java.util.Collections.shuffle (Fisher-Yates)
-                mutableListOf(currentSong!!).apply { addAll(remaining) }
-            } else {
-                currentQueue.apply { shuffle() }
-            }
-
-            // Update Player Queue (Replace all items)
-            val mediaItems = newQueue.map { item ->
-                MediaItem.Builder()
-                    .setMediaId(item.id.toString())
-                    .setUri(item.contentUri) 
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(item.title)
-                            .setArtist(item.artist)
-                            .setArtworkUri(item.albumArtUri)
-                            .build()
-                    )
-                    .build()
-            }
+            // [SMART SHUFFLE FIX] 
+            // Do NOT physically shuffle the queue (Fisher-Yates on list).
+            // User wants Visual Order (Sorted) + Random Playback (Internal Shuffle).
             
-            controller.setMediaItems(mediaItems)
-            controller.seekTo(0, controller.currentPosition) // Current song is now at 0
+            // 1. Enable Player Internal Shuffle
+            controller.shuffleModeEnabled = true
             
-            // We use Manual Shuffle, so disable Player's internal shuffle to avoid double-shuffling
-            controller.shuffleModeEnabled = false 
+            // 2. Set Repeat to ALL (for Infinite Playback)
+            controller.repeatMode = Player.REPEAT_MODE_ALL
+            _repeatMode.value = Player.REPEAT_MODE_ALL
             
-            // Ensure Repeat All is on for continuous play
-            toggleRepeatMode(Player.REPEAT_MODE_ALL)
+            // 3. Ensure Queue reflects "Visual Order" (Timeline order)
+            // If the queue was already sorted, we leave it alone.
+            // If updateCurrentQueueFromController() is called, it will pull timeline order.
+            
         } else {
-            // Disable Shuffle: In a real app we might restore original order.
-            // For now, just disabling the flag. The list remains "as is" (shuffled state becomes new order).
-            // Or we could rely on Player's shuffle off, but we replaced the queue.
-            // User request is specifically about the ALGORITHM. Manual shuffle ensures Fisher-Yates.
-            mediaController?.shuffleModeEnabled = false
+            // Disable Shuffle
+            controller.shuffleModeEnabled = false
+            // Restore Repeat Mode via cycle or default to ALL/OFF?
+            // Usually disabling shuffle reverts to sequential play.
         }
     }
+
+
 
     // Persistence Logic
     private var isRestored = false

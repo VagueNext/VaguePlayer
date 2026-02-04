@@ -45,7 +45,8 @@ fun PlaylistScreen(
     onOverlayBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
     hazeState: HazeState? = null,
     onPlaylistClick: (Playlist) -> Unit,
-    animatedVisibilityScope: Any? = null, // 兼容性参数，未使用
+    onContextMenuRequest: (Playlist, Offset) -> Unit, // New callback
+    animatedVisibilityScope: Any? = null,
     onSongMenuRequest: (com.vagueplayer.music.data.model.Song, Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
 ) {
     val effectiveHazeState = hazeState ?: remember { HazeState() }
@@ -81,11 +82,16 @@ fun PlaylistScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(playlists) { playlist ->
-                SimplePlaylistCard(
-                    playlist = playlist,
-                    onClick = { onPlaylistClick(playlist) },
-                    onLongClick = { onShowAddMenu(Offset.Zero) }
-                )
+                // Track position for menu
+                var cardPosition by remember { mutableStateOf(Offset.Zero) }
+                
+                Box(modifier = Modifier.onGloballyPositioned { cardPosition = it.boundsInWindow().center }) {
+                    SimplePlaylistCard(
+                        playlist = playlist,
+                        onClick = { onPlaylistClick(playlist) },
+                        onLongClick = { onContextMenuRequest(playlist, cardPosition) }
+                    )
+                }
             }
         }
 
