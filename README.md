@@ -15,12 +15,14 @@ Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音�
 
 ### 🎨 极致视觉设计 (Visual Excellence)
 *   **液态玻璃引擎 (Liquid Glass Engine)**: 全局采用定制的 AGSL Shader 和 RenderEffect，模拟真实液态的张力、光线折射与色散（Chromatic Aberration）。
+*   **无缝形变 (Seamless Morphing)**: 采用 Shared Element Transition 技术，Mini Player 与全屏播放器之间实现丝滑的形态转换，专辑封面与控件布局完美衔接。
 *   **流体底栏 (Liquid Dock)**: 独创的底栏设计，迷你播放器与导航栏能够像水银般动态融合与分离，根据手势产生有机形变。
-*   **实时模糊 (Real-time Blur)**: 利用 `Haze` 库实现的各种高性能毛玻璃效果，适配明暗模式，层次分明。
+*   **实时模糊 (Stable Glass Blur)**: 利用深度定制的 `Haze` 库实现的高性能毛玻璃效果，修复了各种渲染崩溃，适配明暗模式，层次分明。
 
 ### 🎵 纯粹音乐体验 (Pure Music)
 *   **无缝播放 (Gapless Playback)**: 基于 ExoPlayer/Media3 深度优化，消除切歌间隙，适合古典乐与现场录音专辑。
 *   **智能队列管理**: 
+    *   **真正的随机播放 (True Random Shuffle)**: 基于 Fisher-Yates 算法，确保每一轮播放的绝对随机与公平，支持循环检测自动重洗，杜绝伪随机的重复感。
     *   **下一首播放 (Play Next)**: 侧滑歌曲即可快速插入。
     *   **多选模式**: 长按批量管理，支持拖拽、删除、批量添加。
 *   **沉浸式歌词**: 极简的歌词界面，支持标准 LRC 格式同步滚动。
