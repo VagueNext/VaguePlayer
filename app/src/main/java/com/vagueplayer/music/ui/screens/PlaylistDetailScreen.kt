@@ -155,16 +155,11 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                     .haze(effectiveHazeState)
             ) {
                 // Shared Background Layer - Decoupled from Content
+                    // Shared Background Layer - Decoupled from Content
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .sharedBounds(
-                            sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
-                            animatedVisibilityScope = animatedVisibilityScope,
-                            boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                            renderInOverlayDuringTransition = true,
-                            clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp))
-                        )
+                        // .sharedBounds(...) REMOVED to fix flicker/glitch
                         .background(MaterialTheme.colorScheme.background)
                 )
 
@@ -176,7 +171,7 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                         state = listState,
                         modifier = Modifier
                             .fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 100.dp)
+                        contentPadding = PaddingValues(bottom = 160.dp)
                     ) {
                         // 1. Header Image
                         // 1. Header Image
@@ -188,8 +183,7 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                                     .sharedElement(
                                         state = rememberSharedContentState(key = "cover_${playlist.id}"),
                                         animatedVisibilityScope = animatedVisibilityScope,
-                                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                                        renderInOverlayDuringTransition = true
+                                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
                                     )
                             ) {
                                 // Background Blur Image

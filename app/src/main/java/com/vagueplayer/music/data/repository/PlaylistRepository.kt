@@ -67,7 +67,9 @@ class PlaylistRepository(private val context: Context) {
     data class LastSessionData(
         val lastPlayedSongId: Long,
         val lastPositionMs: Long,
-        val lastPlaylistIds: List<Long>
+        val lastPlaylistIds: List<Long>,
+        val shuffleMode: Boolean = false,
+        val repeatMode: Int = 0 // Player.REPEAT_MODE_OFF
     )
 
     private val sessionFile = File(context.filesDir, "last_session.json")

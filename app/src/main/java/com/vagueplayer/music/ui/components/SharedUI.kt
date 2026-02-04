@@ -93,7 +93,8 @@ fun GlassIconButton(
                     tint = glassTint,
                     distortionStrength = distortionStrength,
                     edgeWidth = edgeWidth,
-                    aberrationStrength = aberrationStrength
+                    aberrationStrength = aberrationStrength,
+                    enableShader = true // Enforce Shader
                 )
         )
 

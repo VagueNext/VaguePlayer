@@ -47,10 +47,10 @@ fun LiquidSwitch(
     checkedTrackColor: Color = Color(0xFF34C759),
     uncheckedTrackColor: Color = Color(0xFFE9E9EA)
 ) {
-    // 布局常量
-    val trackWidth = 60.dp // Wider track
-    val trackHeight = 32.dp 
-    val padding = 2.dp
+    // 布局常量 (缩小为原来的2/3)
+    val trackWidth = 40.dp // 60 * 2/3 = 40
+    val trackHeight = 21.dp // 32 * 2/3 ≈ 21
+    val padding = 1.5.dp // 2 * 2/3 = 1.33, 四舍五入到1.5
     
     // 动画状态
     val switchProgress = remember { Animatable(if (checked) 1f else 0f) }

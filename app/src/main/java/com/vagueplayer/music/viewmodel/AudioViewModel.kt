@@ -31,7 +31,8 @@ import kotlinx.coroutines.isActive // [NEW] Explicit Import
 data class LyricLine(
     val timeMs: Long,
     val text: String,
-    val translation: String? = null // For bilingual lyrics (e.g., Chinese translation)
+    val translation: String? = null, // For bilingual lyrics (e.g., Chinese translation)
+    val syllables: List<Pair<Long, String>>? = null // For karaoke: start time -> syllable text
 )
 
 class AudioViewModel(
@@ -607,18 +608,36 @@ class AudioViewModel(
     }
     
     private fun loadLyrics(song: Song?) {
+        // **CRITICAL**: Immediately clear lyrics when switching songs
+        _lyrics.value = emptyList()
+        _currentLyricIndex.value = 0
+        
         if (song == null) {
-            _lyrics.value = emptyList()
             return
         }
         
+        // Store current song ID to prevent race conditions
+        val targetSongId = song.id
+        
         // Try to load real LRC file
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // Double-check we're still on the same song
+            if (_currentSong.value?.id != targetSongId) {
+                Log.d("AudioViewModel", "Song changed during lyrics load, aborting")
+                return@launch
+            }
+            
             val parsedLyrics = com.vagueplayer.music.data.lyrics.LrcParser.loadLyricsForSong(context, song.contentUri)
+            
+            // Final check before updating
+            if (_currentSong.value?.id != targetSongId) {
+                Log.d("AudioViewModel", "Song changed after lyrics parsed, aborting")
+                return@launch
+            }
             
             if (parsedLyrics.isNotEmpty()) {
                 _lyrics.value = parsedLyrics
-                Log.d("AudioViewModel", "Loaded ${parsedLyrics.size} lyric lines from LRC file")
+                Log.d("AudioViewModel", "Loaded ${parsedLyrics.size} lyric lines for: ${song.title}")
             } else {
                 // Fallback: Show "No lyrics" message
                 _lyrics.value = listOf(
@@ -1067,6 +1086,16 @@ class AudioViewModel(
         _progress.value = positionMs.toFloat()
     }
 
+    fun seekAndPlay(positionMs: Long) {
+        mediaController?.let {
+            it.seekTo(positionMs)
+            if (!it.isPlaying) {
+                it.play()
+            }
+        }
+        _progress.value = positionMs.toFloat()
+    }
+
     fun skipNext() {
         if (mediaController?.hasNextMediaItem() == true) {
             mediaController?.seekToNextMediaItem()
@@ -1227,7 +1256,9 @@ class AudioViewModel(
         val data = com.vagueplayer.music.data.repository.PlaylistRepository.LastSessionData(
             lastPlayedSongId = currentSongId,
             lastPositionMs = currentPosition,
-            lastPlaylistIds = currentQueueIds
+            lastPlaylistIds = currentQueueIds,
+            shuffleMode = _isShuffleEnabled.value,
+            repeatMode = _repeatMode.value
         )
         
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -1283,6 +1314,13 @@ class AudioViewModel(
                 controller.seekTo(index, lastSession.lastPositionMs)
                 controller.prepare()
                 controller.pause() // Ensure it starts paused
+                
+                // Restore Repeat/Shuffle Mode
+                _isShuffleEnabled.value = lastSession.shuffleMode
+                
+                // Apply Repeat Mode to Controller and UI
+                controller.repeatMode = lastSession.repeatMode
+                _repeatMode.value = lastSession.repeatMode
                 
                 // Initialize UI State manually since no transition might happen until play
                 _currentQueue.value = queue

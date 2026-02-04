@@ -358,14 +358,6 @@ fun MainScreen() {
         Box(
              modifier = Modifier
                 .fillMaxSize()
-        ) {
-        
-        // -------------------------------------------------------------------------
-        // SOURCE LAYER: Content to be blurred
-        // -------------------------------------------------------------------------
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
                 .liquidGlassLens(
                     bounds1 = playerBounds,
                     bounds2 = navBounds,
@@ -378,6 +370,14 @@ fun MainScreen() {
                     tint = Color.White.copy(alpha = 0.80f),
                     enableShader = true
                 )
+        ) {
+        
+        // -------------------------------------------------------------------------
+        // SOURCE LAYER: Content to be blurred
+        // -------------------------------------------------------------------------
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
         ) {
             // Inner Box for Haze Source Capture (Raw Content)
             Box(
@@ -851,27 +851,25 @@ fun MainScreen() {
         // Playlist Detail Container Transform
         // BackHandler moved to PlaylistDetailScreen for better predictive back support
 
-        // Replaces old ExpandableContainer logic
-        androidx.compose.animation.AnimatedContent(
-            targetState = selectedPlaylist,
-            transitionSpec = {
-                // Fade In/Out the page itself, Shared Bounds handles the geometry
-                 androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) togetherWith
-                 androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))
-            },
-            label = "PlaylistDetailTransition",
-            modifier = Modifier.zIndex(100f) // Ensure it sits on top
-        ) { playlist ->
-            if (playlist != null) {
-                // Determine cover URL (either mostly played or first)
-                val coverUrl = audioViewModel.getMostPlayedSong(playlist)?.albumArtUri?.toString() 
-                    ?: playlist.songs.firstOrNull()?.albumArtUri?.toString()
+        // Playlist Detail Container Transform
+        // Replaces old AnimatedContent to allow Shared Element Scope to pass through
+        val currentPlaylist = selectedPlaylist
+        androidx.compose.animation.AnimatedVisibility(
+            visible = currentPlaylist != null,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300)),
+            modifier = Modifier.zIndex(100f).fillMaxSize()
+        ) { 
+            if (currentPlaylist != null) {
+                // Determine cover URL
+                val coverUrl = audioViewModel.getMostPlayedSong(currentPlaylist)?.albumArtUri?.toString() 
+                    ?: currentPlaylist.songs.firstOrNull()?.albumArtUri?.toString()
                 
                 PlaylistDetailScreen(
-                    playlist = playlist,
+                    playlist = currentPlaylist,
                     viewModel = audioViewModel,
                     onDismissRequest = { selectedPlaylist = null },
-                    animatedVisibilityScope = this, // From AnimatedContent
+                    animatedVisibilityScope = this, // Now refers to AnimatedVisibilityScope from AnimatedVisibility
                     hazeState = mainHazeState,
                     onSongMenuRequest = { song, offset, size ->
                         activeSongForMenu = song

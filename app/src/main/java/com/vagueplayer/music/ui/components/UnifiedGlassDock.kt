@@ -80,8 +80,10 @@ fun UnifiedGlassDock(
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(RoundedCornerShape(19.dp))
-                        // Transparent - Shader handles visual
-                        .background(Color.Transparent) 
+                        .simpleGlass(
+                            cornerRadius = 19.dp,
+                            enableShader = true
+                        )
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -120,12 +122,15 @@ fun UnifiedGlassDock(
                         .onGloballyPositioned { onNavPositioned(it.boundsInRoot()) }, // Report Bounds
                     contentAlignment = Alignment.Center
                 ) {
-                    // LAYER 1: GLASS BACKGROUND (Transparent now)
+                    // LAYER 1: GLASS BACKGROUND
                     Box(
                         modifier = Modifier
                             .fillMaxSize() 
                             .clip(RoundedCornerShape(dockItemRadius)) 
-                            .background(Color.Transparent)
+                            .simpleGlass(
+                                cornerRadius = 100.dp, // Use large radius for pill
+                                enableShader = true
+                            )
                     )
 
                     // LAYER 2: CONTENT
@@ -164,12 +169,15 @@ fun UnifiedGlassDock(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    // LAYER 1: GLASS BACKGROUND (Transparent)
+                    // LAYER 1: GLASS BACKGROUND
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(dockItemRadius))
-                            .background(Color.Transparent)
+                            .simpleGlass(
+                                cornerRadius = 100.dp,
+                                enableShader = true
+                            )
                     )
 
                     // LAYER 2: CONTENT

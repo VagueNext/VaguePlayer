@@ -123,7 +123,9 @@ fun MiniPlayer(
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
-                modifier = Modifier.fillMaxHeight(),
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(bottom = 8.dp), // Shift content up to avoid glass distortion at bottom edge
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Album Art / Icon

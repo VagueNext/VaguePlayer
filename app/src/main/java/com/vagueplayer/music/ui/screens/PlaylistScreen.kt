@@ -5,16 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import com.vagueplayer.music.ui.components.bouncyClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -31,27 +27,26 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vagueplayer.music.viewmodel.AudioViewModelFactory
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
+import com.vagueplayer.music.ui.theme.AccentBlue
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.boundsInRoot
-import com.vagueplayer.music.ui.theme.AccentBlue
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.animation.core.spring
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+/**
+ * Simplified PlaylistScreen - No SharedElement Animations
+ * 干净简洁的歌单页面，专注于正确的显示和交互
+ */
 @Composable
-fun SharedTransitionScope.PlaylistScreen(
+fun PlaylistScreen(
     onCreatePlaylist: () -> Unit,
-    onShowAddMenu: (androidx.compose.ui.geometry.Offset) -> Unit,
+    onShowAddMenu: (Offset) -> Unit,
     onOverlayBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
     hazeState: HazeState? = null,
     onPlaylistClick: (Playlist) -> Unit,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
+    animatedVisibilityScope: Any? = null, // 兼容性参数，未使用
+    onSongMenuRequest: (com.vagueplayer.music.data.model.Song, Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
 ) {
     val effectiveHazeState = hazeState ?: remember { HazeState() }
     
@@ -73,10 +68,6 @@ fun SharedTransitionScope.PlaylistScreen(
         }
     }.value
 
-    val isSidebarLeft by viewModel.isSidebarOnLeft.collectAsState()
-
-    val coroutineScope = rememberCoroutineScope()
-
     Box(modifier = Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -90,11 +81,10 @@ fun SharedTransitionScope.PlaylistScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(playlists) { playlist ->
-                PlaylistCard(
+                SimplePlaylistCard(
                     playlist = playlist,
                     onClick = { onPlaylistClick(playlist) },
-                    onLongClick = { onShowAddMenu(Offset.Zero) },
-                    animatedVisibilityScope = animatedVisibilityScope
+                    onLongClick = { onShowAddMenu(Offset.Zero) }
                 )
             }
         }
@@ -103,11 +93,10 @@ fun SharedTransitionScope.PlaylistScreen(
             title = "歌单",
             scrollAlpha = scrollAlpha,
             hazeState = effectiveHazeState,
-            modifier = Modifier
-                .align(Alignment.TopCenter),
+            modifier = Modifier.align(Alignment.TopCenter),
             action = {
                 Box {
-                    var localBtnPos by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+                    var localBtnPos by remember { mutableStateOf(Offset.Zero) }
                     
                     IconButton(
                         onClick = { onShowAddMenu(localBtnPos) },
@@ -128,60 +117,43 @@ fun SharedTransitionScope.PlaylistScreen(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+/**
+ * Simplified Playlist Card - No Animations
+ * 简单的歌单卡片，确保封面完整显示
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun SharedTransitionScope.PlaylistCard(
+fun SimplePlaylistCard(
     playlist: Playlist,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    onLongClick: () -> Unit
 ) {
-    Box(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .bouncyClickable(
                 targetScale = 0.95f, 
                 onClick = onClick,
                 onLongClick = onLongClick
-             )
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        // Shared Container Background (Decoupled)
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .sharedBounds(
-                    sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp))
-                )
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White)
-        )
-
-        // Content Layer
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp)) // Clip content to match card shape
-                // No background here, using shared background
+            modifier = Modifier.fillMaxWidth()
         ) {
+            // 封面图片
             Box(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .aspectRatio(1f)
-                    .sharedElement(
-                        state = rememberSharedContentState(key = "cover_${playlist.id}"),
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
-                    )
-                    .background(MaterialTheme.colorScheme.surfaceVariant) // Placeholder background for image
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(playlist.songs.firstOrNull()?.albumArtUri)
-                        .crossfade(false)
-                        .memoryCacheKey("cover_${playlist.id}")
+                        .crossfade(true)
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
@@ -189,20 +161,21 @@ fun SharedTransitionScope.PlaylistCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 2. Text Info
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            // 歌单信息
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+            ) {
                 Text(
                     text = playlist.name,
-                    fontSize = 17.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    fontSize = 16.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     maxLines = 1,
+                    color = Color.Black
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${playlist.songs.size} 首歌曲",
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     color = Color.Gray,
                     maxLines = 1
                 )

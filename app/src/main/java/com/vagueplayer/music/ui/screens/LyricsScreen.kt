@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -264,7 +265,7 @@ fun LyricsScreen(
                                     } else Modifier
                                 )
                                 .clickable {
-                                    viewModel.seekTo(line.timeMs)
+                                    viewModel.seekAndPlay(line.timeMs)
                                 },
                             horizontalAlignment = alignment
                         ) {
@@ -279,6 +280,8 @@ fun LyricsScreen(
                                 KaraokeLine(
                                     text = line.text,
                                     lineProgress = lineProgress,
+                                    currentTime = progress.toLong(),
+                                    syllables = line.syllables,
                                     isRightAligned = isRightAligned,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -398,74 +401,147 @@ fun GlassControlsCapsule(
 @Composable
 fun KaraokeLine(
     text: String,
-    lineProgress: Float,
+    lineProgress: Float, // Fallback for linear interpolation [0..1]
+    currentTime: Long = 0L, // Absolute current time
+    syllables: List<Pair<Long, String>>? = null, // Syllable data
     isRightAligned: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    // Split into characters for CJK, or use words for English if preferred. 
-    val chars = remember(text) { text.toList() }
-    
     FlowRow(
-        modifier = modifier.padding(4.dp), // Padding to prevent clipping of Glow/Scale
+        modifier = modifier.padding(4.dp), 
         horizontalArrangement = if (isRightAligned) Arrangement.End else Arrangement.Start,
         verticalArrangement = Arrangement.Center
     ) {
-        chars.forEachIndexed { index, char ->
-            // Logic: Total Progress (0.0 - 1.0) maps to indices (0 - count).
-            val charStart = index.toFloat() / chars.size
-            val charEnd = (index + 1).toFloat() / chars.size
-            
-            val isPassed = lineProgress > charEnd
-            val isActive = lineProgress >= charStart && lineProgress <= charEnd
-            
-            // Animation: Pop Up when Active, Settle when Passed
-            val targetScale = if (isActive) 1.5f else 1.0f
-            val targetAlpha = if (isActive || isPassed) 1.0f else 0.5f
-            
-            val animatedScale by animateFloatAsState(
-                targetValue = targetScale,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = 50f // Very Low stiffness for slower, smoother animation
-                ),
-                label = "charScale"
-            )
-            
-            val animatedAlpha by animateFloatAsState(
-                targetValue = targetAlpha,
-                animationSpec = tween(300),
-                label = "charAlpha"
-            )
+        if (syllables != null && syllables.isNotEmpty()) {
+            // --- SYLLABLE MODE (Progressive Gradient Fill) ---
+            syllables.forEachIndexed { index, (startTime, syllableText) ->
+                val nextTimestamp = if (index < syllables.size - 1) syllables[index + 1].first else (startTime + 500)
+                val duration = (nextTimestamp - startTime).coerceAtLeast(1)
+                
+                // Calculate fill progress for this SPECIFIC syllable
+                // < 0: Not started
+                // 0..1: Filling
+                // > 1: Filled
+                val syllableProgress = ((currentTime - startTime).toFloat() / duration).coerceIn(0f, 1f)
+                
+                val isActive = currentTime in startTime until nextTimestamp
+                val isPassed = currentTime >= nextTimestamp
+                
+                // --- ANIMATION SPECS ---
+                // Scale: 1.06f (Reduced)
+                // Lift: -6.dp (~16px) (Increased)
+                
+                val targetScale = if (isActive) 1.06f else 1.0f 
+                val targetOffsetY = if (isActive) -6f else 0f 
+                
+                val animatedScale by animateFloatAsState(
+                    targetValue = targetScale,
+                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
+                    label = "sylScale"
+                )
+                
+                val animatedOffsetY by animateFloatAsState(
+                    targetValue = targetOffsetY,
+                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 300f),
+                    label = "sylOffset"
+                )
 
-            // High Light / Glow Effect
-            // Reduce intensity to avoid boxy artifacts
-            val targetGlow = if (isActive) 0.6f else 0.0f
-            val animatedGlow by animateFloatAsState(
-                targetValue = targetGlow,
-                animationSpec = tween(200),
-                label = "charGlow" 
-            )
+                // Progressive Gradient Brush
+                // We want a sharp transition from White to Transparent/DimWhite
+                // e.g. 0.5 -> Stop at 0.5 white, 0.501 dim
+                val brush = Brush.horizontalGradient(
+                    0.0f to Color.White,
+                    syllableProgress to Color.White,
+                    syllableProgress.coerceAtMost(0.999f) + 0.001f to Color.White.copy(alpha = 0.5f),
+                    1.0f to Color.White.copy(alpha = 0.5f)
+                )
+
+                Text(
+                    text = syllableText,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    style = androidx.compose.ui.text.TextStyle(
+                        brush = brush, // Apply Gradient Fill
+                        shadow = if (isActive) androidx.compose.ui.graphics.Shadow(
+                            color = Color.White.copy(alpha = 0.5f),
+                            blurRadius = 12f 
+                        ) else null
+                    ),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(end = 1.dp)
+                        .graphicsLayer {
+                            scaleX = animatedScale
+                            scaleY = animatedScale
+                            translationY = animatedOffsetY
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.8f) 
+                            // Ensure alpha is 1f because we use Brush for opacity
+                            alpha = 1f 
+                        }
+                )
+            }
+        
+        } else {
+            // --- CHAR MODE (Linear Fallback) ---
+            // Still fill progressive if we don't have syllables? 
+            // The 'lineProgress' is 0..1 for the WHOLE line.
+            // Distribute it across characters.
             
-            Text(
-                text = char.toString(),
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = animatedAlpha),
-                style = androidx.compose.ui.text.TextStyle(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = Color.White.copy(alpha = animatedGlow),
-                        blurRadius = 15f // Reduced from 30f to avoid box artifacts
-                    )
-                ),
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .padding(end = 1.dp)
-                    .graphicsLayer {
-                        scaleX = animatedScale
-                        scaleY = animatedScale
-                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.8f) 
-                    }
-            )
+            val chars = remember(text) { text.toList() }
+            chars.forEachIndexed { index, char ->
+                val charStart = index.toFloat() / chars.size
+                val charEnd = (index + 1).toFloat() / chars.size
+                
+                // Map global line progress to local char progress 0..1
+                // progress 0.1, char 0..0.1 -> fill 1.0
+                // progress 0.05, char 0..0.1 -> fill 0.5
+                val localProgress = ((lineProgress - charStart) / (charEnd - charStart)).coerceIn(0f, 1f)
+                
+                val isActive = localProgress > 0f && localProgress < 1f
+                // val isPassed = localProgress >= 1f
+                
+                val targetScale = if (isActive) 1.06f else 1.0f
+                val targetOffsetY = if (isActive) -6f else 0f
+                
+                val animatedScale by animateFloatAsState(
+                    targetValue = targetScale,
+                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
+                    label = "charScale"
+                )
+                val animatedOffsetY by animateFloatAsState(
+                    targetValue = targetOffsetY, 
+                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 300f)
+                )
+                
+                val brush = Brush.horizontalGradient(
+                    0.0f to Color.White,
+                    localProgress to Color.White,
+                    localProgress + 0.001f to Color.White.copy(alpha = 0.5f),
+                    1.0f to Color.White.copy(alpha = 0.5f)
+                )
+
+                Text(
+                    text = char.toString(),
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    style = androidx.compose.ui.text.TextStyle(
+                        brush = brush,
+                        shadow = if (isActive) androidx.compose.ui.graphics.Shadow(
+                            color = Color.White.copy(alpha = 0.5f),
+                            blurRadius = 12f
+                        ) else null
+                    ),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(end = 1.dp)
+                        .graphicsLayer {
+                            scaleX = animatedScale
+                            scaleY = animatedScale
+                            translationY = animatedOffsetY
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.8f) 
+                        }
+                )
+            }
         }
     }
 }
