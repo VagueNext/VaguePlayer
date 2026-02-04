@@ -60,29 +60,6 @@ fun SharedTransitionScope.ExpandableContainer(
 ) {
     // 1. Scrim (Removed as per user request)
     // Was: Lines 62-78
-    // 2. Drag Logic
-    var dragOffset by remember { mutableFloatStateOf(0f) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-    val screenHeightPx = with(density) { screenHeight.toPx() }
-    val dismissThreshold = 150f 
-
-    val dragState = androidx.compose.foundation.gestures.rememberDraggableState { delta ->
-        // Only allow dragging down (positive delta)
-        val newOffset = dragOffset + delta
-        dragOffset = newOffset.coerceAtLeast(0f)
-    }
-
-    // Reset drag on open
-    LaunchedEffect(isExpanded) {
-        if (isExpanded) dragOffset = 0f
-    }
-    
-    // Animate scale/alpha based on drag
-    val dragProgress = (dragOffset / screenHeightPx).coerceIn(0f, 1f)
-    val scale = 1f - (dragProgress * 0.2f)
-    val alpha = 1f - dragProgress
-
     // 2. Expanded Card (Target)
     AnimatedVisibility(
         visible = isExpanded,
@@ -90,18 +67,11 @@ fun SharedTransitionScope.ExpandableContainer(
         exit = ExitTransition.None,
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(50f) // Ensure it sits above everything
+            .zIndex(50f) 
     ) {
-        // Apply drag offset for dismiss
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .offset { IntOffset(0, dragOffset.roundToInt()) }
-                .graphicsLayer {
-                    this.scaleX = scale
-                    this.scaleY = scale
-                    // When dragging, we might want to round corners more?
-                }
         ) {
             // Scrim (Fades out as we drag)
             Box(
@@ -134,7 +104,7 @@ fun SharedTransitionScope.ExpandableContainer(
                 )
             }
 
-            val finalRadius = cornerRadius * scale
+
             
             // Container Content (The Card)
             Box(
@@ -143,23 +113,12 @@ fun SharedTransitionScope.ExpandableContainer(
                     .fillMaxWidth() 
                     .fillMaxHeight() 
                     .then(sharedElementModifier)
-                    .background(containerColor, androidx.compose.foundation.shape.RoundedCornerShape(finalRadius)) 
+                    .background(containerColor, androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius)) 
                     .graphicsLayer {
                         this.clip = true
-                        this.shape = androidx.compose.foundation.shape.RoundedCornerShape(finalRadius)
+                        this.shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius) // Simplify radius
                     }
-                    .draggable(
-                        state = dragState,
-                        orientation = androidx.compose.foundation.gestures.Orientation.Vertical,
-                        onDragStopped = { velocity ->
-                            if (dragOffset > dismissThreshold || velocity > 1000f) {
-                                onDismissRequest()
-                            } else {
-                                // Snap back
-                                dragOffset = 0f
-                            }
-                        }
-                    )
+                    // Draggable removed to prevent conflicts with PlayerScreen's own gesture handling
             ) {
                  content()
                  

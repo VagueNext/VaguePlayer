@@ -196,19 +196,10 @@ fun LyricsScreen(
                                     )
                                 )
                             } else {
-                                // For Current/Past, we also respect delay for smoothness? 
-                                // Actually, Current (Dist 0) has 0 delay. Past (Dist 1) has 200ms delay.
-                                // This means Previous line fades out/shrinks slightly later. Great.
+                                // For Current/Past
                                 kotlinx.coroutines.delay(delay)
                                 offsetY.animateTo(0f)
                             }
-                            
-                            // 2. Property Animation Logic (Scale, Alpha, Blur)
-                            // We launch these AFTER the delay (already waited above if strictly sequential? No, coroutines sequential)
-                            // If index > currentIndex, we waited 'delay' already.
-                            // If index <= currentIndex, we moved delay output logic to a generic place or repeat?
-                            
-                            // Let's structure nicely:
                         }
                         
                         // Combined LaunchedEffect for all properties to ensure sync
@@ -413,87 +404,86 @@ fun KaraokeLine(
         verticalArrangement = Arrangement.Center
     ) {
         if (syllables != null && syllables.isNotEmpty()) {
-            // --- SYLLABLE MODE (Progressive Gradient Fill + Per-Character Animation) ---
+            // --- SYLLABLE MODE (Progressive Gradient Fill + Dynamic Stiffness) ---
             syllables.forEachIndexed { index, (startTime, syllableText) ->
                 val nextTimestamp = if (index < syllables.size - 1) syllables[index + 1].first else (startTime + 500)
                 val duration = (nextTimestamp - startTime).coerceAtLeast(1)
                 
-                // Use a Row to keep the syllable (word) together, preventing wrapping mid-word
-                Row(
-                    modifier = Modifier.padding(end = 4.dp), 
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    val chars = syllableText.toList()
-                    val charDuration = duration / chars.size.coerceAtLeast(1)
-                    
-                    chars.forEachIndexed { charIndex, char ->
-                        // Interpolate time for this specific character
-                        val charStartTime = startTime + (charIndex * charDuration)
-                        val charNextTime = charStartTime + charDuration
-                        
-                        // Per-Character Interaction Logic
-                        val isCharActive = currentTime in charStartTime until charNextTime
-                        val isCharPassed = currentTime >= charNextTime
-                        
-                        // --- ANIMATION SPECS ---
-                        // Scale: 1.04f (Reduced further)
-                        // Lift: -6f (Per character)
-                        
-                        val targetScale = if (isCharActive) 1.04f else 1.0f 
-                        val targetOffsetY = if (isCharActive || isCharPassed) -6f else 0f 
-                        
-                        val animatedScale by animateFloatAsState(
-                            targetValue = targetScale,
-                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 150f), // Smoother/Slower
-                            label = "charScale"
-                        )
-                        
-                        val animatedOffsetY by animateFloatAsState(
-                            targetValue = targetOffsetY,
-                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 150f),
-                            label = "charOffset"
-                        )
-                        
-                        // Determine progress for this specific CHAR
-                        // This handles the gradient fill "per character" if we wanted, 
-                        // but user specifically asked for "Lift" to be per character.
-                        // For the Gradient Fill:
-                        // We still want the "Liquid" fill to flow through the character?
-                        // Or efficiently fill the character?
-                        // If we use the GLOBAL brush on the syllable, we need to map coordinates.
-                        // Simpler: Calculate "Local Progress" for the character 0..1 based on Char Time
-                        val charProgress = ((currentTime - charStartTime).toFloat() / charDuration).coerceIn(0f, 1f)
-                        
-                         val brush = Brush.horizontalGradient(
-                            0.0f to Color.White,
-                            charProgress to Color.White,
-                            charProgress.coerceAtMost(0.999f) + 0.001f to Color.White.copy(alpha = 0.5f),
-                            1.0f to Color.White.copy(alpha = 0.5f)
-                        )
-
-                        Text(
-                            text = char.toString(),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            style = androidx.compose.ui.text.TextStyle(
-                                brush = brush, 
-                                shadow = if (isCharActive) androidx.compose.ui.graphics.Shadow(
-                                    color = Color.White.copy(alpha = 0.5f),
-                                    blurRadius = 8f // Reduced blur
-                                ) else null
-                            ),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .graphicsLayer {
-                                    scaleX = animatedScale
-                                    scaleY = animatedScale
-                                    translationY = animatedOffsetY
-                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f) // Left-Bottom Pivot? "Left big right small"ish
-                                    alpha = 1f 
-                                }
-                        )
-                    }
+                // Calculate fill progress for this SPECIFIC syllable
+                val syllableProgress = ((currentTime - startTime).toFloat() / duration).coerceIn(0f, 1f)
+                
+                val isActive = currentTime in startTime until nextTimestamp
+                val isPassed = currentTime >= nextTimestamp
+                
+                // Traffic Light Logic:
+                // Passed (Finished) -> Fast Start (high stiffness)
+                // Active (Singing):
+                // - Leader (Index 0): Fast (400f)
+                // - Second (Index 1): Medium (200f) "Ready to start"
+                // - Others: Slow (80f) "Reaction delay"
+                
+                val isLeader = index == 0
+                val isSecond = index == 1
+                
+                val stiffness = when {
+                    isPassed -> 400f
+                    isLeader -> 400f
+                    isSecond -> 200f // "Ready to start" - faster than tail but slower than leader
+                    else -> 80f
                 }
+                
+                val damping = when {
+                    isPassed || isLeader -> 0.75f
+                    isSecond -> 0.82f
+                    else -> 0.85f
+                }
+                
+                // Lift/Scale Specs
+                val targetScale = if (isActive) 1.04f else 1.0f 
+                val targetOffsetY = if (isActive || isPassed) -6f else 0f 
+                
+                val animatedScale by animateFloatAsState(
+                    targetValue = targetScale,
+                    animationSpec = spring(dampingRatio = damping, stiffness = stiffness),
+                    label = "sylScale"
+                )
+                
+                val animatedOffsetY by animateFloatAsState(
+                    targetValue = targetOffsetY,
+                    animationSpec = spring(dampingRatio = damping, stiffness = stiffness),
+                    label = "sylOffset"
+                )
+
+                // Progressive Gradient Brush
+                val brush = Brush.horizontalGradient(
+                    0.0f to Color.White,
+                    syllableProgress to Color.White,
+                    syllableProgress.coerceAtMost(0.999f) + 0.001f to Color.White.copy(alpha = 0.5f),
+                    1.0f to Color.White.copy(alpha = 0.5f)
+                )
+
+                Text(
+                    text = syllableText,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    style = androidx.compose.ui.text.TextStyle(
+                        brush = brush, 
+                        shadow = if (isActive || isPassed) androidx.compose.ui.graphics.Shadow(
+                            color = Color.White.copy(alpha = 0.5f),
+                            blurRadius = 8f 
+                        ) else null
+                    ),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .graphicsLayer {
+                            scaleX = animatedScale
+                            scaleY = animatedScale
+                            translationY = animatedOffsetY
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f) // Bottom Left
+                            alpha = 1f 
+                        }
+                )
             }
         
         } else {
@@ -520,12 +510,12 @@ fun KaraokeLine(
                 
                 val animatedScale by animateFloatAsState(
                     targetValue = targetScale,
-                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 150f),
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 80f),
                     label = "scale"
                 )
                 val animatedOffsetY by animateFloatAsState(
                     targetValue = targetOffsetY, 
-                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 150f),
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 80f),
                     label = "offset"
                 )
                 

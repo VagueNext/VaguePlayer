@@ -793,14 +793,7 @@ fun MainScreen() {
 
 
 
-        // Playlist Overlays - Z-Index: Top of Player (100f)
-        Box(modifier = Modifier.zIndex(100f).fillMaxSize()) {
-            com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
-                viewModel = audioViewModel,
-                isVisible = showPlaylistGlobal,
-                onDismiss = { showPlaylistGlobal = false }
-            )
-
+        // Playlist Overlays - Call MOVED to end of file for Z-Index override
             if (showAddToPlaylist) {
                 com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
                     viewModel = audioViewModel,
@@ -1254,7 +1247,7 @@ fun MainScreen() {
             )
         }
 
-        }
+
 
         // -------------------------------------------------------------------------
         // SINK LAYER: Unified Glass Dock (Topmost Layer)
@@ -1499,12 +1492,21 @@ fun MainScreen() {
     // Directly render; component handles internal AnimatedVisibility
     // Playlist Global Overlay (Highest Priority for Overlay Stack)
     // Directly render; component handles internal AnimatedVisibility
-    com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
-         viewModel = audioViewModel,
-         isVisible = showPlaylistGlobal, 
-         onDismiss = { showPlaylistGlobal = false }
-    )
     BackHandler(enabled = showPlaylistGlobal) { showPlaylistGlobal = false }
+
+    // Playlist Global Overlay (Highest Priority via Z-Index)
+    // Moved to the absolute end of the composition to render LAST.
+    // Explicitly set zIndex(1000f) to override any Dock/MiniPlayer zIndex.
+    Box(modifier = Modifier.fillMaxSize().zIndex(1000f)) {
+        com.vagueplayer.music.ui.components.GlassPlaylistOverlay(
+             viewModel = audioViewModel,
+             isVisible = showPlaylistGlobal, 
+             onDismiss = { showPlaylistGlobal = false }
+        )
+    }
+
     } // End Root Box (contains both Haze Box and Dialog Layer as siblings)
     } // End SharedTransitionLayout
+
+
 } // End MainScreen
