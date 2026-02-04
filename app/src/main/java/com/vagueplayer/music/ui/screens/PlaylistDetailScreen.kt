@@ -51,6 +51,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.ui.layout.positionInWindow
 
 import com.vagueplayer.music.ui.components.GlassIconButton
+import com.vagueplayer.music.ui.components.liquidGlassLens
 
 
 import androidx.compose.runtime.rememberCoroutineScope
@@ -65,6 +66,7 @@ fun SharedTransitionScope.PlaylistDetailScreen(
     onDismissRequest: () -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope,
     hazeState: HazeState? = null,
+    playerBounds: androidx.compose.ui.geometry.Rect = androidx.compose.ui.geometry.Rect.Zero, // For glass distortion
     onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
 ) {
     val effectiveHazeState = hazeState ?: remember { HazeState() }
@@ -141,6 +143,23 @@ fun SharedTransitionScope.PlaylistDetailScreen(
             .fillMaxSize(),
         color = Color.Transparent
     ) {
+        // Glass Lens Wrapper for content distortion
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .liquidGlassLens(
+                    bounds1 = playerBounds,
+                    bounds2 = null,
+                    bounds3 = null,
+                    bounds4 = null,
+                    distortionStrength = 45f,
+                    edgeWidth = 60f,
+                    fusionStrength = 35f,
+                    aberrationStrength = 0.3f,
+                    tint = Color.White.copy(alpha = 0.80f),
+                    enableShader = true
+                )
+        ) {
         // Content Container
         Box(
             modifier = Modifier
@@ -276,7 +295,12 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                     onLetterSelected = { letter ->
                         // Find first song starting with this letter
                         val targetIndex = sortedSongs.indexOfFirst { song ->
-                            val firstChar = song.title.firstOrNull()?.uppercaseChar()
+                            // Check the appropriate field based on sort option
+                            val textToCheck = when (currentSortOption) {
+                                com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.ARTIST -> song.artist
+                                else -> song.title
+                            }
+                            val firstChar = textToCheck.firstOrNull()?.uppercaseChar()
                             if (letter == '#') {
                                 firstChar != null && !firstChar.isLetter()
                             } else {
@@ -442,5 +466,6 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                 onCancel = { showRenameDialog = false }
             )
         }
-    }
+        } // End liquidGlassLens Box
+    } // End Surface
 }

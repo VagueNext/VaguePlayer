@@ -146,14 +146,20 @@ fun AlphabetSideBar(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(CircleShape)
-                    .background(com.vagueplayer.music.ui.theme.AccentBlue.copy(alpha = 0.9f)),
+                    .background(Color.White.copy(alpha = 0.4f)) // Stronger frosted base
+                    .simpleGlass(
+                        cornerRadius = 40.dp, // Circle
+                        tint = Color.White.copy(alpha = 0.6f), // Much stronger frost
+                        blurRadius = 8.dp, // Add blur for frosted effect
+                        enableShader = true
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = selectedLetter?.toString() ?: "",
                     fontSize = 36.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = com.vagueplayer.music.ui.theme.AccentBlue
                 )
             }
         }

@@ -872,6 +872,7 @@ fun MainScreen() {
                     onDismissRequest = { selectedPlaylist = null },
                     animatedVisibilityScope = this, // Now refers to AnimatedVisibilityScope from AnimatedVisibility
                     hazeState = mainHazeState,
+                    playerBounds = playerBounds ?: androidx.compose.ui.geometry.Rect.Zero, // Pass glass bounds
                     onSongMenuRequest = { song, offset, size ->
                         activeSongForMenu = song
                         songMenuAnchor = offset

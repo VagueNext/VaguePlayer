@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 
+
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 fun UnifiedGlassDock(
@@ -85,7 +86,8 @@ fun UnifiedGlassDock(
                             cornerRadius = 19.dp,
                             enableShader = true
                         )
-                )
+                ) {
+                }
 
                 // Layer 2: Content
                 Box(
