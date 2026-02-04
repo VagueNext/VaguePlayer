@@ -540,6 +540,35 @@ class AudioViewModel(
                  lastMediaId = newMediaId
                  
                  updateCurrentSongFromController()
+                 
+                 // [SMART SHUFFLE] Reshuffle at Penultimate Song
+                 val controller = mediaController ?: return
+                 val isShuffle = _isShuffleEnabled.value
+                 val repeat = _repeatMode.value
+                 
+                 if (isShuffle && repeat == Player.REPEAT_MODE_OFF) {
+                     val timeline = controller.currentTimeline
+                     if (!timeline.isEmpty) {
+                         val current = controller.currentMediaItemIndex
+                         // Check Next
+                         val next = timeline.getNextWindowIndex(current, Player.REPEAT_MODE_OFF, true) // Shuffle Mode
+                         
+                         if (next != androidx.media3.common.C.INDEX_UNSET) {
+                             // Check Next-Next (Penultimate Check)
+                             val nextNext = timeline.getNextWindowIndex(next, Player.REPEAT_MODE_OFF, true)
+                             
+                             if (nextNext == androidx.media3.common.C.INDEX_UNSET) {
+                                  // usage: We are at (End - 1). The 'next' song is the LAST one.
+                                  // Reshuffle NOW to append more songs seamlessly.
+                                  com.vagueplayer.music.utils.LogUtils.d("SmartShuffle", "Penultimate song detected. Reshuffling...")
+                                  
+                                  // Toggle Shuffle to Reseed
+                                  controller.shuffleModeEnabled = false
+                                  controller.shuffleModeEnabled = true
+                             }
+                         }
+                     }
+                 }
             }
 
             override fun onPositionDiscontinuity(
@@ -1119,13 +1148,16 @@ class AudioViewModel(
     fun toggleRepeatMode(forceMode: Int? = null) {
         mediaController?.let {
             val nextMode = forceMode ?: when (it.repeatMode) {
-                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL // Start with All
+                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL // Off -> All
                 Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL // Loop back to All (No Off)
+                Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_OFF // One -> Off
                 else -> Player.REPEAT_MODE_ALL
             }
             it.repeatMode = nextMode
             _repeatMode.value = nextMode
+            
+            // Sync Shuffle state if Repeat All is forced (usually disables shuffle logic visually)
+            // But here we rely on isShuffleEnabled flag.
             
             // Reset loop counts on manual toggle
             if (forceMode == null) {
@@ -1137,6 +1169,11 @@ class AudioViewModel(
     
     // Cycle: Shuffle -> Repeat All -> Repeat One -> Shuffle (Loop)
     // "Repeat Off" is removed from the cycle.
+    // Cycle: Shuffle -> Repeat All -> Repeat One -> Shuffle (Loop)
+    // Mode Mapping:
+    // Shuffle: Shuffle=True, Repeat=OFF (To detect end for Smart Shuffle)
+    // Repeat All: Shuffle=False, Repeat=ALL
+    // Repeat One: Shuffle=False, Repeat=ONE
     fun cyclePlayMode() {
         val controller = mediaController ?: return
         
@@ -1145,15 +1182,20 @@ class AudioViewModel(
             _targetLoopCount.value = 0
             _remainingLoopCount.value = 0
             // Reset to Shuffle (Cycle start)
-            controller.repeatMode = Player.REPEAT_MODE_ALL
+            controller.repeatMode = Player.REPEAT_MODE_OFF // Smart Shuffle uses OFF
             controller.shuffleModeEnabled = true
-            _repeatMode.value = Player.REPEAT_MODE_ALL
+            _repeatMode.value = Player.REPEAT_MODE_OFF // UI Mapping needed?
             _isShuffleEnabled.value = true
             return
         }
 
         val isShuffle = _isShuffleEnabled.value
-        val repeat = _repeatMode.value
+        val repeat = _repeatMode.value // Can be OFF, ONE, ALL
+        
+        // Logic:
+        // 1. If currently Shuffle (regardless of repeat, but usually OFF), go to Repeat All
+        // 2. If Repeat All, go to Repeat One
+        // 3. If Repeat One, go to Shuffle
         
         if (isShuffle) {
             // Shuffle -> Repeat All
@@ -1169,18 +1211,20 @@ class AudioViewModel(
                      _repeatMode.value = Player.REPEAT_MODE_ONE
                  }
                  Player.REPEAT_MODE_ONE -> {
-                     // Repeat One -> Shuffle (Loop back)
-                     controller.repeatMode = Player.REPEAT_MODE_ALL // Shuffle needs Repeat All usually
-                     controller.shuffleModeEnabled = true
-                     _repeatMode.value = Player.REPEAT_MODE_ALL
+                     // Repeat One -> Shuffle
+                     // [SMART SHUFFLE] Use REPEAT_MODE_OFF internally for Shuffle to detect end
+                     controller.repeatMode = Player.REPEAT_MODE_OFF
+                     controller.shuffleModeEnabled = true 
+                     
+                     _repeatMode.value = Player.REPEAT_MODE_OFF
                      _isShuffleEnabled.value = true
                  }
-                 else -> { // Off (Initial or edge case)
-                     // Off -> Shuffle (Entry)
+                 else -> { 
+                     // Off/Default -> Shuffle (Entry)
+                     controller.repeatMode = Player.REPEAT_MODE_OFF
                      controller.shuffleModeEnabled = true
-                     controller.repeatMode = Player.REPEAT_MODE_ALL
+                     _repeatMode.value = Player.REPEAT_MODE_OFF
                      _isShuffleEnabled.value = true
-                     _repeatMode.value = Player.REPEAT_MODE_ALL
                  }
              }
         }

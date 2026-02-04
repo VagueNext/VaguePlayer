@@ -19,10 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -144,22 +147,30 @@ fun AlphabetSideBar(
         ) {
             Box(
                 modifier = Modifier
-                    .size(80.dp)
+                    .size(90.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.4f)) // Stronger frosted base
-                    .simpleGlass(
-                        cornerRadius = 40.dp, // Circle
-                        tint = Color.White.copy(alpha = 0.6f), // Much stronger frost
-                        blurRadius = 8.dp, // Add blur for frosted effect
-                        enableShader = true
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.85f),
+                                Color.White.copy(alpha = 0.65f)
+                            )
+                        )
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = selectedLetter?.toString() ?: "",
-                    fontSize = 36.sp,
+                    fontSize = 42.sp,
                     fontWeight = FontWeight.Bold,
-                    color = com.vagueplayer.music.ui.theme.AccentBlue
+                    color = com.vagueplayer.music.ui.theme.AccentBlue,
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color.White.copy(alpha = 0.6f),
+                            offset = androidx.compose.ui.geometry.Offset(0f, 0f),
+                            blurRadius = 6f
+                        )
+                    )
                 )
             }
         }

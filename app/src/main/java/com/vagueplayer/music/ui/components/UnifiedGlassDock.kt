@@ -86,8 +86,7 @@ fun UnifiedGlassDock(
                             cornerRadius = 19.dp,
                             enableShader = true
                         )
-                ) {
-                }
+                )
 
                 // Layer 2: Content
                 Box(
@@ -205,4 +204,3 @@ fun UnifiedGlassDock(
     }
 }
 }
-

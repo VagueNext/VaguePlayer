@@ -293,20 +293,25 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                 com.vagueplayer.music.ui.components.AlphabetSideBar(
                     sections = sidebarSections,
                     onLetterSelected = { letter ->
-                        // Find first song starting with this letter
+                        android.util.Log.d("PlaylistSidebar", "=== Letter: $letter ===")
+                        
+                        // Find first song starting with this letter (always use title, like LibraryScreen)
                         val targetIndex = sortedSongs.indexOfFirst { song ->
-                            // Check the appropriate field based on sort option
-                            val textToCheck = when (currentSortOption) {
-                                com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.ARTIST -> song.artist
-                                else -> song.title
-                            }
-                            val firstChar = textToCheck.firstOrNull()?.uppercaseChar()
-                            if (letter == '#') {
+                            val firstChar = song.title.firstOrNull()?.uppercaseChar()
+                            val matches = if (letter == '#') {
                                 firstChar != null && !firstChar.isLetter()
                             } else {
                                 firstChar == letter
                             }
+                            
+                            // Debug logging for letter A
+                            if (letter == 'A' && song.title.firstOrNull()?.uppercaseChar() in listOf('A', 'a')) {
+                                android.util.Log.d("PlaylistSidebar", "Checking A: '${song.title}' firstChar=$firstChar matches=$matches")
+                            }
+                            
+                            matches
                         }
+                        android.util.Log.d("PlaylistSidebar", "Target: $targetIndex → Scroll: ${targetIndex + 2}")
                         if (targetIndex >= 0) {
                             coroutineScope.launch {
                                 // +2 offset because of Header Image (index 0) and Metadata (index 1)
@@ -317,6 +322,7 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                     isOnLeft = isSidebarLeft,
                     modifier = Modifier
                         .align(if (isSidebarLeft) Alignment.CenterStart else Alignment.CenterEnd)
+                        .zIndex(2f) // Float above liquidGlassLens to receive touch events
                         .padding(
                             start = if (isSidebarLeft) 8.dp else 0.dp,
                             end = if (isSidebarLeft) 0.dp else 8.dp
