@@ -71,6 +71,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.belerweb:pinyin4j:2.5.1") // Pinyin conversion
     implementation(libs.haze) // Background blur
+    implementation("net.jthink:jaudiotagger:3.0.1") // Read embedded lyrics from audio files
 
 
     testImplementation(libs.junit)

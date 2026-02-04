@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -101,7 +102,7 @@ fun GlassPlaylistOverlay(
                          distortionStrength = 60f, // Increased for visibility
                          edgeWidth = 40f // Increased for visibility
                      )
-                     .background(Color.White.copy(alpha = 0.4f)) // Ensure visible tint
+                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)) // Subtle tint for glass visibility
                     .clickable(enabled = false) {}
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {

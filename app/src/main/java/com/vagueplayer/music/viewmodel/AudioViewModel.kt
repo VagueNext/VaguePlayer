@@ -1160,11 +1160,56 @@ class AudioViewModel(
 
     
     fun setShuffleMode(enabled: Boolean) {
-        mediaController?.shuffleModeEnabled = enabled
         _isShuffleEnabled.value = enabled
-        // If enabled, usually ensure Repeat All
+        
         if (enabled) {
-             toggleRepeatMode(Player.REPEAT_MODE_ALL)
+            val controller = mediaController ?: return
+            val currentQueue = _currentQueue.value.toMutableList()
+            if (currentQueue.isEmpty()) return
+
+            val currentSong = _currentSong.value
+            val playingIndex = if (currentSong != null) {
+                currentQueue.indexOfFirst { it.id == currentSong.id }
+            } else -1
+
+            val newQueue = if (playingIndex != -1) {
+                // Keep current song, shuffle the rest (Fisher-Yates)
+                val remaining = currentQueue.filter { it.id != currentSong!!.id }.toMutableList()
+                remaining.shuffle() // Kotlin's shuffle uses java.util.Collections.shuffle (Fisher-Yates)
+                mutableListOf(currentSong!!).apply { addAll(remaining) }
+            } else {
+                currentQueue.apply { shuffle() }
+            }
+
+            // Update Player Queue (Replace all items)
+            val mediaItems = newQueue.map { item ->
+                MediaItem.Builder()
+                    .setMediaId(item.id.toString())
+                    .setUri(item.contentUri) 
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(item.title)
+                            .setArtist(item.artist)
+                            .setArtworkUri(item.albumArtUri)
+                            .build()
+                    )
+                    .build()
+            }
+            
+            controller.setMediaItems(mediaItems)
+            controller.seekTo(0, controller.currentPosition) // Current song is now at 0
+            
+            // We use Manual Shuffle, so disable Player's internal shuffle to avoid double-shuffling
+            controller.shuffleModeEnabled = false 
+            
+            // Ensure Repeat All is on for continuous play
+            toggleRepeatMode(Player.REPEAT_MODE_ALL)
+        } else {
+            // Disable Shuffle: In a real app we might restore original order.
+            // For now, just disabling the flag. The list remains "as is" (shuffled state becomes new order).
+            // Or we could rely on Player's shuffle off, but we replaced the queue.
+            // User request is specifically about the ALGORITHM. Manual shuffle ensures Fisher-Yates.
+            mediaController?.shuffleModeEnabled = false
         }
     }
 

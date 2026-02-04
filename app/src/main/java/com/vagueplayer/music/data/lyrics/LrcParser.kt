@@ -155,19 +155,33 @@ object LrcParser {
      */
     private fun getEmbeddedLyrics(context: Context, audioUri: Uri): String {
         try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(context, audioUri)
+            val filePath = getFilePathFromUri(context, audioUri) ?: return ""
+            val audioFile = org.jaudiotagger.audio.AudioFileIO.read(File(filePath))
+            val tag = audioFile.tag ?: return ""
             
-            // Try to get lyrics from metadata (METADATA_KEY_LYRICS is not always available)
-            // MediaMetadataRetriever doesn't directly expose USLT, but we can try
-            val lyrics = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE + 100) // Hack attempt
-            retriever.release()
+            // Try USLT (Unsynchronized Lyrics) - ID3v2
+            val lyrics = tag.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
+            if (lyrics.isNotEmpty()) {
+                Log.d(TAG, "Found embedded USLT lyrics")
+                return lyrics
+            }
             
-            // Note: MediaMetadataRetriever doesn't have a direct LYRICS key
-            // Real implementation would need a library like JAudioTagger
-            // For now, return empty to fall back to .lrc files
+            // For MP4/M4A files, try different field
+            if (filePath.endsWith(".m4a", ignoreCase = true) || filePath.endsWith(".mp4", ignoreCase = true)) {
+                try {
+                    val mp4Tag = tag as? org.jaudiotagger.tag.mp4.Mp4Tag
+                    val lyricsField = mp4Tag?.getFirst(org.jaudiotagger.tag.mp4.Mp4FieldKey.LYRICS)
+                    if (lyricsField?.isNotEmpty() == true) {
+                        Log.d(TAG, "Found embedded MP4 lyrics")
+                        return lyricsField
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error reading MP4 lyrics: ${e.message}")
+                }
+            }
+            
         } catch (e: Exception) {
-            Log.e(TAG, "Error reading embedded lyrics", e)
+            Log.e(TAG, "Error reading embedded lyrics: ${e.message}", e)
         }
         return ""
     }

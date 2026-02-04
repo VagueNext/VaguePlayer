@@ -147,116 +147,125 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                 .fillMaxSize()
                 .onGloballyPositioned { rootLayoutCoordinates = it }
         ) {
-            // Shared Background Layer - Decoupled from Content
+            // Haze Source Container - Wraps Background and List
+            // Separated from Overlay Elements (Header, Sidebar) to prevent Haze recursion
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .sharedBounds(
-                        sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                        renderInOverlayDuringTransition = false
-                    )
-                    .background(MaterialTheme.colorScheme.background)
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
+                    .haze(effectiveHazeState)
             ) {
-                androidx.compose.foundation.lazy.LazyColumn(
-                    state = listState,
+                // Shared Background Layer - Decoupled from Content
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .sharedBounds(
+                            sharedContentState = rememberSharedContentState(key = "container_${playlist.id}"),
+                            animatedVisibilityScope = animatedVisibilityScope,
+                            boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
+                            renderInOverlayDuringTransition = true,
+                            clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp))
+                        )
+                        .background(MaterialTheme.colorScheme.background)
+                )
+
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .haze(effectiveHazeState),
-                    contentPadding = PaddingValues(bottom = 100.dp)
                 ) {
-                    // 1. Header Image
-                    // 1. Header Image
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(250.dp)
-                                .sharedElement(
-                                    state = rememberSharedContentState(key = "cover_${playlist.id}"),
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                    boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
-                                )
-                        ) {
-                            // Background Blur Image
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(playlist.songs.firstOrNull()?.albumArtUri)
-                                    .crossfade(false)
-                                    .memoryCacheKey("cover_${playlist.id}")
-                                    .build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 100.dp)
+                    ) {
+                        // 1. Header Image
+                        // 1. Header Image
+                        item {
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                            )
-                        }
-                    }
-    
-                    // 2. Title & Metadata
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 24.dp, start = 24.dp, end = 24.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable { 
-                                    renameText = playlist.name
-                                    showRenameDialog = true 
-                                }
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f)
+                                    .sharedElement(
+                                        state = rememberSharedContentState(key = "cover_${playlist.id}"),
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
+                                        renderInOverlayDuringTransition = true
+                                    )
                             ) {
-                                Text(
-                                    text = playlist.name,
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
+                                // Background Blur Image
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(playlist.songs.firstOrNull()?.albumArtUri)
+                                        .crossfade(false)
+                                        .memoryCacheKey("cover_${playlist.id}")
+                                        .build(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
                                     modifier = Modifier
-                                        .weight(1f, fill = false) 
+                                        .fillMaxSize()
                                 )
-                                Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp).padding(start = 8.dp), tint = Color.Gray)
                             }
-                            Text(
-                                text = "${playlist.songs.size} 首歌",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Gray,
-                                modifier = Modifier.padding(top = 4.dp)
+                        }
+        
+                        // 2. Title & Metadata
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.Transparent) // Explicit fix for potential white block
+                                    .padding(top = 24.dp, start = 24.dp, end = 24.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.clickable { 
+                                        renameText = playlist.name
+                                        showRenameDialog = true 
+                                    }
+                                ) {
+                                    Text(
+                                        text = playlist.name,
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier
+                                            .weight(1f, fill = false) 
+                                    )
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp).padding(start = 8.dp), tint = Color.Gray)
+                                }
+                                Text(
+                                    text = "${playlist.songs.size} 首歌",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+    
+                        // 3. Song List
+                        itemsIndexed(sortedSongs, key = { _, song -> song.id }) { index, song ->
+                            com.vagueplayer.music.ui.screens.SongItem(
+                                song = song,
+                                selectedIds = selectedIds,
+                                isSelectionMode = isSelectionMode,
+                                viewModel = viewModel,
+                                onClick = { clickedSong ->
+                                    if (isSelectionMode) {
+                                        viewModel.toggleSelection(clickedSong.id)
+                                    } else {
+                                        viewModel.playSong(clickedSong, sortedSongs, playlist.name)
+                                    }
+                                },
+                                onLongClick = { clickedSong ->
+                                    if (!isSelectionMode) {
+                                        viewModel.toggleSelection(clickedSong.id)
+                                    }
+                                },
+                                onMenuClick = { s, offset ->
+                                    onSongMenuRequest(s, offset, null)
+                                }
                             )
                         }
-                    }
-
-                    // 3. Song List
-                    itemsIndexed(sortedSongs, key = { _, song -> song.id }) { index, song ->
-                        com.vagueplayer.music.ui.screens.SongItem(
-                            song = song,
-                            selectedIds = selectedIds,
-                            isSelectionMode = isSelectionMode,
-                            viewModel = viewModel,
-                            onClick = { clickedSong ->
-                                if (isSelectionMode) {
-                                    viewModel.toggleSelection(clickedSong.id)
-                                } else {
-                                    viewModel.playSong(clickedSong, sortedSongs, playlist.name)
-                                }
-                            },
-                            onLongClick = { clickedSong ->
-                                if (!isSelectionMode) {
-                                    viewModel.toggleSelection(clickedSong.id)
-                                }
-                            },
-                            onMenuClick = { s, offset ->
-                                onSongMenuRequest(s, offset, null)
-                            }
-                        )
                     }
                 }
             }
