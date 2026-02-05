@@ -2,7 +2,7 @@
 
 探索玻璃拟态 (Liquid Glassmorphism) 与流体交互美学。
 
-Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音乐播放器。目前处于能用但不好用的状态，本仓库后续或许会放弃更新，因为建立本项目只为我学习基本的安卓开发
+Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音乐播放器。目前处于能用但不好用的状态，本仓库后续或许会放弃更新，因为建立此项目只是为我学习基本的安卓开发
 
 后续有考虑开发Windows端  敬请期待
 
