@@ -116,6 +116,19 @@ class PlaylistRepository(private val context: Context) {
             emptyMap()
         }
     }
+    
+    // Atomically update statistics for a single song
+    private val statsLock = Any()
+    
+    fun updateStatistics(songId: Long, updateBlock: (com.vagueplayer.music.data.model.SongStatistics) -> com.vagueplayer.music.data.model.SongStatistics) {
+        synchronized(statsLock) {
+            val currentStats = loadSongStatistics().toMutableMap()
+            val songStats = currentStats[songId] ?: com.vagueplayer.music.data.model.SongStatistics(songId)
+            val newStats = updateBlock(songStats)
+            currentStats[songId] = newStats
+            saveSongStatistics(currentStats)
+        }
+    }
 
     // --- Daily Recommendation State ---
 

@@ -21,6 +21,7 @@ import com.vagueplayer.music.data.repository.PlaylistRepository
 import com.vagueplayer.music.service.PlaybackService
 import com.vagueplayer.music.data.engine.RecommendationEngine
 import com.vagueplayer.music.data.model.RecommendationState
+import com.vagueplayer.music.data.analysis.PlaybackAnalyzer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +46,8 @@ class AudioViewModel(
 ) : ViewModel() {
 
 
+    // Playback Analytics (NEW)
+    private val playbackAnalyzer = PlaybackAnalyzer(context, playlistRepository)
     
     // Playback session tracking
     private var currentSessionStart: Long = 0
@@ -536,6 +539,8 @@ class AudioViewModel(
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
                 if (!isPlaying) {
+                    // Analyze session when playback stops/pauses
+                    playbackAnalyzer.onStopped()
                     savePlaybackState() // Save on pause
                 }
             }
@@ -552,6 +557,13 @@ class AudioViewModel(
                      _remainingLoopCount.value = 0
                  }
                  lastMediaId = newMediaId
+                 
+                 // Track song change in analytics
+                 val newSong = mediaItem?.let { item ->
+                     _songs.value.find { it.id.toString() == item.mediaId }
+                 }
+                 // Check if this song was from recommendation (would need to track this separately)
+                 playbackAnalyzer.onSongChanged(newSong, isRecommendation = false)
                  
                  updateCurrentSongFromController()
                  
@@ -892,7 +904,11 @@ class AudioViewModel(
                 // Wait for songs to be loaded if needed
                 if (_allSongs.value.isEmpty()) return@launch
 
-                val result = recommendationEngine.generateDailyRecommendations(_allSongs.value, _songStatistics.value)
+                val result = recommendationEngine.generateDailyRecommendations(
+                    _allSongs.value,
+                    _songStatistics.value,
+                    currentDevice = null // Device detection will be enhanced later
+                )
                 
                 val newState = RecommendationState(
                     lastRefreshTime = now,
@@ -917,7 +933,7 @@ class AudioViewModel(
             stat.copy(
                 playCount = stat.playCount + 1,
                 lastPlayedAt = currentSessionStart,
-                playbackHistory = (stat.playbackHistory + currentSessionStart).takeLast(20) // Keep last 20 plays
+                playbackHistory = ((stat.playbackHistory ?: emptyList()) + currentSessionStart).takeLast(20) // Keep last 20 plays
             )
         }
     }
@@ -1595,6 +1611,8 @@ class AudioViewModel(
                     
                     _progress.value = currentPos.toFloat()
                     updateLyricIndex(currentPos)
+                    // Track playback progress for analytics
+                    playbackAnalyzer.onPlaybackProgress(currentPos)
                     
                     // POLLING LOOP DETECTION
                     if (_repeatMode.value == Player.REPEAT_MODE_ONE && _targetLoopCount.value > 0) {
