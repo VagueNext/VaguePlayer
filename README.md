@@ -6,7 +6,6 @@ Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音�
 
 后续有考虑开发Windows端  敬请期待
 
-[![Telegram](https://img.shields.io/badge/Telegram-Join-blue?logo=telegram)](https://t.me/+pEfTc1-Ag_k1MjZk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
