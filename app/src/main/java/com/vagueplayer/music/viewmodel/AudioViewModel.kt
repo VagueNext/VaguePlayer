@@ -577,9 +577,13 @@ class AudioViewModel(
                      val nextIndex = timeline.getNextWindowIndex(currentIndex, Player.REPEAT_MODE_OFF, true)
                      val isCurrentLastSong = (nextIndex == androidx.media3.common.C.INDEX_UNSET)
                      
-                     // When we land on the last song (and weren't there before), force reshuffle
-                     if (isCurrentLastSong && !wasOnLastSong) {
-                          android.util.Log.d("SmartShuffle", "Reached last song (pos $currentIndex). Force reshuffle...")
+                     // CRITICAL: Only reshuffle when AUTO-PLAYING to the last song (连播到最后一首)
+                     // NOT when user manually selects the last song (用户手动选择最后一首)
+                     val isAutoPlayback = (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)
+                     
+                     // When we AUTO-PLAY into the last song (and weren't there before), force reshuffle
+                     if (isCurrentLastSong && !wasOnLastSong && isAutoPlayback) {
+                          android.util.Log.d("SmartShuffle", "Auto-played to last song (pos $currentIndex). Force reshuffle...")
                           viewModelScope.launch {
                               // Save current playlist
                               val items = mutableListOf<MediaItem>()

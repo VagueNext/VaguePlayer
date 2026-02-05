@@ -29,6 +29,25 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
         
+        // Error Handling: Auto-skip malformed songs
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.e("PlaybackService", "Critical Player Error: ${error.errorCodeName}", error)
+                
+                // If the file is malformed (ParserException) or unplayable, try to skip
+                if (player.hasNextMediaItem()) {
+                    android.util.Log.w("PlaybackService", "Skipping unplayable media item...")
+                    player.seekToNextMediaItem()
+                    player.prepare()
+                    player.play()
+                } else {
+                    android.util.Log.w("PlaybackService", "Cannot skip error (No next item).")
+                    // Stop to prevent infinite retry loops on single bad file
+                    player.stop() 
+                }
+            }
+        })
+        
         // REMOVED: Default repeatMode (Now controlled by ViewModel state restoration)
 
         // Create MediaSession
