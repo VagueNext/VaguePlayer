@@ -58,7 +58,7 @@ Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音�
 ### 编译步骤
 1.  克隆仓库:
     ```bash
-    git clone https://github.com/your-repo/vague-player.git
+    https://github.com/VagueNext/VaguePlayer.git
     ```
 2.  在 Android Studio 中打开项目。
 3.  同步 Gradle 依赖。
