@@ -1,13 +1,10 @@
 # Vague Player ( 朦胧音乐 
 
-探索兔子玻璃拟态 (Liquid Glassmorphism) 与流体交互的极限美学。
+探索玻璃拟态 (Liquid Glassmorphism) 与流体交互美学。
 
-Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音乐播放器。它不仅仅是一个播放工具，更是一次对 Android 平台 UI/UX 极限的探索。
+Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音乐播放器。目前处于能用但不好用的状态，本仓库后续或许会放弃更新，因为建立此项目只是为我学习基本的安卓开发
 
 后续有考虑开发Windows端  敬请期待
-
-[![Telegram](https://img.shields.io/badge/Telegram-Join-blue?logo=telegram)](https://t.me/+pEfTc1-Ag_k1MjZk)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
@@ -16,7 +13,7 @@ Vague Player 是一款现代基于 Jetpack Compose 构建的 Android 本地音�
 ### 🎨 极致视觉设计 (Visual Excellence)
 *   **液态玻璃引擎 (Liquid Glass Engine)**: 全局采用定制的 AGSL Shader 和 RenderEffect，模拟真实液态的张力、光线折射与色散（Chromatic Aberration）。
 *   **无缝形变 (Seamless Morphing)**: 采用 Shared Element Transition 技术，Mini Player 与全屏播放器之间实现丝滑的形态转换，专辑封面与控件布局完美衔接。
-*   **流体底栏 (Liquid Dock)**: 独创的底栏设计，迷你播放器与导航栏能够像水银般动态融合与分离，根据手势产生有机形变。
+*   **流体底栏 (Liquid Dock)**:迷你播放器与导航栏能够像水银般动态融合与分离。
 *   **实时模糊 (Stable Glass Blur)**: 利用深度定制的 `Haze` 库实现的高性能毛玻璃效果，修复了各种渲染崩溃，适配明暗模式，层次分明。
 
 ### 🎵 纯粹音乐体验 (Pure Music)
