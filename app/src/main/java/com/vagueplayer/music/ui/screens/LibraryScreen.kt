@@ -59,6 +59,7 @@ import com.vagueplayer.music.ui.components.simpleGlass
 fun LibraryScreen(
     onShowSortOptions: (Offset) -> Unit,
     hazeState: HazeState? = null,
+
     onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
 ) {
     // Define Local State for Button Position
@@ -159,9 +160,12 @@ fun LibraryScreen(
                             top = 120.dp, // Space for floating header (96dp + gap)
                             bottom = 160.dp,
                             start = if (isSidebarLeft) 20.dp else 0.dp, 
+
                             end = if (!isSidebarLeft) 20.dp else 0.dp
                         )
                     ) {
+
+
                     if (songs.isEmpty() && !isScanning) {
                          item {
                              Box(modifier = Modifier.fillParentMaxSize().height(200.dp), contentAlignment = Alignment.Center)  {
@@ -334,5 +338,69 @@ fun LibraryScreen(
         backgroundColor = Color.White,
         contentColor = com.vagueplayer.music.ui.theme.AccentBlue
     )
+    }
+}
+
+@Composable
+fun DailyRecommendBanner(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    colors = listOf(
+                        com.vagueplayer.music.ui.theme.AccentBlue.copy(alpha = 0.1f),
+                        com.vagueplayer.music.ui.theme.AccentBlue.copy(alpha = 0.05f)
+                    )
+                )
+            )
+            .clickable { onClick() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Calendar Icon Look
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(com.vagueplayer.music.ui.theme.AccentBlue),
+            contentAlignment = Alignment.Center
+        ) {
+            val cal = java.util.Calendar.getInstance()
+            val day = cal.get(java.util.Calendar.DAY_OF_MONTH).toString()
+            Text(
+                text = day,
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        
+        Spacer(modifier = Modifier.width(16.dp))
+        
+        Column {
+            Text(
+                text = "每日推荐",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+            Text(
+                text = "根据你的音乐口味生成",
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
+        }
+        
+        Spacer(modifier = Modifier.weight(1f))
+        
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
+            contentDescription = null,
+            tint = com.vagueplayer.music.ui.theme.AccentBlue.copy(alpha = 0.8f),
+            modifier = Modifier.size(28.dp)
+        )
     }
 }

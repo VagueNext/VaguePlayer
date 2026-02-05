@@ -19,6 +19,8 @@ import com.vagueplayer.music.data.repository.FolderRepository
 import com.vagueplayer.music.data.repository.MusicRepository
 import com.vagueplayer.music.data.repository.PlaylistRepository
 import com.vagueplayer.music.service.PlaybackService
+import com.vagueplayer.music.data.engine.RecommendationEngine
+import com.vagueplayer.music.data.model.RecommendationState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +43,12 @@ class AudioViewModel(
     private val folderRepository: FolderRepository,
     private val playlistRepository: PlaylistRepository
 ) : ViewModel() {
+
+
+    
+    // Playback session tracking
+    private var currentSessionStart: Long = 0
+    private var currentSessionSongId: Long? = null
 
     // Sleep Timer Support
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
@@ -500,8 +508,9 @@ class AudioViewModel(
                 mediaController?.let { controller ->
                     _isPlaying.value = controller.isPlaying
                     // FIXED: Don't read from controller, use saved value instead
-                    // Apply saved repeatMode to Service
+                    // Apply saved repeatMode and shuffleMode to Service
                     controller.repeatMode = _repeatMode.value
+                    controller.shuffleModeEnabled = _isShuffleEnabled.value
                     
                     // Sync Settings to Service
                     setMixAudioEnabled(_isMixAudioEnabled.value)
@@ -658,9 +667,16 @@ class AudioViewModel(
         val currentMediaItem = mediaController?.currentMediaItem
         val mediaId = currentMediaItem?.mediaId
         if (mediaId != null) {
+            // End previous song session
+            onSongEnded()
+            
             // Find song in our list
             val song = _songs.value.find { it.id.toString() == mediaId }
             _currentSong.value = song
+            
+            // Start new song session
+            song?.let { onSongStarted(it.id) }
+            
             loadLyrics(song) // Load Lyrics
             savePlaybackState() // Save on song change
         }
@@ -794,6 +810,138 @@ class AudioViewModel(
         _hiddenPaths.value = prefs.getStringSet("hidden_paths", emptySet()) ?: emptySet() // Re-load to be sure
         _favoriteIds.value = saved.mapNotNull { it.toLongOrNull() }.toSet()
     }
+    
+    // === Song Statistics Management ===
+    
+    private fun loadSongStatistics() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val stats = playlistRepository.loadSongStatistics()
+            _songStatistics.value = stats
+        }
+    }
+    
+    private fun saveSongStatistics() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            playlistRepository.saveSongStatistics(_songStatistics.value)
+        }
+    }
+    
+    fun updateSongStat(songId: Long, updater: (com.vagueplayer.music.data.model.SongStatistics) -> com.vagueplayer.music.data.model.SongStatistics) {
+        val current = _songStatistics.value.toMutableMap()
+        val existing = current[songId] ?: com.vagueplayer.music.data.model.SongStatistics(songId = songId)
+        current[songId] = updater(existing)
+        _songStatistics.value = current
+        saveSongStatistics()
+    }
+
+    // === Song Statistics for Recommendation Engine ===
+    private val _songStatistics = MutableStateFlow<Map<Long, com.vagueplayer.music.data.model.SongStatistics>>(emptyMap())
+    val songStatistics: StateFlow<Map<Long, com.vagueplayer.music.data.model.SongStatistics>> = _songStatistics.asStateFlow()
+
+    // === Daily Recommendation Logic ===
+    private val recommendationEngine = RecommendationEngine()
+    
+    private val _recommendationState = MutableStateFlow(RecommendationState())
+    val recommendationState: StateFlow<RecommendationState> = _recommendationState.asStateFlow()
+
+    // Derived flow: Map IDs to actual Song objects
+    // Using simple find for now, optimized map lookup could be better for large libraries
+    val dailyRecommendations: StateFlow<List<Song>> = kotlinx.coroutines.flow.combine(_recommendationState, _allSongs) { state, allSongs ->
+        state.recommendedSongIds.mapNotNull { id -> allSongs.find { it.id == id } }
+    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
+
+
+    private fun loadRecommendationState() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val state = playlistRepository.loadRecommendationState()
+            _recommendationState.value = state
+        }
+    }
+
+    fun refreshDailyRecommendations(force: Boolean = false) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val currentState = _recommendationState.value
+            val now = System.currentTimeMillis()
+            
+            // Check if refresh is needed (6:00 AM cutoff)
+            val cal = java.util.Calendar.getInstance()
+            cal.timeInMillis = now
+            val currentDay = cal.get(java.util.Calendar.DAY_OF_YEAR)
+            val currentYear = cal.get(java.util.Calendar.YEAR)
+            
+            cal.timeInMillis = currentState.lastRefreshTime
+            val lastDay = cal.get(java.util.Calendar.DAY_OF_YEAR)
+            val lastYear = cal.get(java.util.Calendar.YEAR)
+            
+            // Logic: If last refresh was NOT today (considering 6am start of day), refresh.
+            // Simplified: If not same day, refresh.
+            // Better: If now > 6:00 and lastRefresh < Today 6:00
+            
+            val today6am = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 6)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }.timeInMillis
+
+            val shouldRefresh = force || 
+                               (now >= today6am && currentState.lastRefreshTime < today6am) ||
+                               currentState.recommendedSongIds.isEmpty()
+
+            if (shouldRefresh) {
+                // Wait for songs to be loaded if needed
+                if (_allSongs.value.isEmpty()) return@launch
+
+                val result = recommendationEngine.generateDailyRecommendations(_allSongs.value, _songStatistics.value)
+                
+                val newState = RecommendationState(
+                    lastRefreshTime = now,
+                    recommendedSongIds = result.songs.map { it.id },
+                    recommendationReasons = result.reasons
+                )
+                
+                _recommendationState.value = newState
+                playlistRepository.saveRecommendationState(newState)
+                Log.d("AudioViewModel", "Daily Recommendations Refreshed. Count: ${result.songs.size}")
+            }
+        }
+    }
+    
+    // Track playback session
+    private fun onSongStarted(songId: Long) {
+        currentSessionStart = System.currentTimeMillis()
+        currentSessionSongId = songId
+        
+        // Update statistics: increment play count and record timestamp
+        updateSongStat(songId) { stat ->
+            stat.copy(
+                playCount = stat.playCount + 1,
+                lastPlayedAt = currentSessionStart,
+                playbackHistory = (stat.playbackHistory + currentSessionStart).takeLast(20) // Keep last 20 plays
+            )
+        }
+    }
+    
+    private fun onSongEnded() {
+        val songId = currentSessionSongId ?: return
+        val duration = System.currentTimeMillis() - currentSessionStart
+        val songDuration = _currentSong.value?.duration ?: 0
+        
+        if (songDuration > 0) {
+            when {
+                duration < 30_000 -> {
+                    // Skip: Less than 30s
+                    updateSongStat(songId) { it.copy(skipCount = it.skipCount + 1) }
+                }
+                duration >= (songDuration * 0.9) -> {
+                    // Completion: Played more than 90%
+                    updateSongStat(songId) { it.copy(completionCount = it.completionCount + 1) }
+                }
+            }
+        }
+        
+        currentSessionSongId = null
+    }
 
     fun deleteSongs(songs: List<Song>) {
         viewModelScope.launch {
@@ -874,8 +1022,13 @@ class AudioViewModel(
                 
                 _isScanning.value = false
                 tryRestoreState() // Try restoring after library load
+                checkDailyRefresh() // Check if we need to generate daily recommendations
             }
         }
+    }
+
+    private fun checkDailyRefresh() {
+        refreshDailyRecommendations(force = false)
     }
 
     fun toggleFavorite(songId: Long) {
@@ -1220,6 +1373,7 @@ class AudioViewModel(
             _repeatMode.value = Player.REPEAT_MODE_OFF // UI Mapping needed?
             _isShuffleEnabled.value = true
             prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_OFF).apply()
+            prefs.edit().putBoolean("shuffle_enabled", true).apply()
             return
         }
 
@@ -1237,6 +1391,7 @@ class AudioViewModel(
             _isShuffleEnabled.value = false
             _repeatMode.value = Player.REPEAT_MODE_ALL
             prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_ALL).apply()
+            prefs.edit().putBoolean("shuffle_enabled", false).apply()
         } else {
              when (repeat) {
                  Player.REPEAT_MODE_ALL -> {
@@ -1254,6 +1409,7 @@ class AudioViewModel(
                      _repeatMode.value = Player.REPEAT_MODE_ALL // UI shows Loop All + Shuffle
                      _isShuffleEnabled.value = true
                      prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_ALL).apply()
+                     prefs.edit().putBoolean("shuffle_enabled", true).apply()
                  }
                  else -> { 
                      // Off/Default -> Shuffle (Entry)
@@ -1262,6 +1418,7 @@ class AudioViewModel(
                      _repeatMode.value = Player.REPEAT_MODE_ALL
                      _isShuffleEnabled.value = true
                      prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_ALL).apply()
+                     prefs.edit().putBoolean("shuffle_enabled", true).apply()
                  }
              }
         }
@@ -1271,6 +1428,8 @@ class AudioViewModel(
     
     fun setShuffleMode(enabled: Boolean) {
         _isShuffleEnabled.value = enabled
+        // Save shuffle state
+        prefs.edit().putBoolean("shuffle_enabled", enabled).apply()
         
         val controller = mediaController ?: return
         
@@ -1400,9 +1559,13 @@ class AudioViewModel(
         _isSidebarOnLeft.value = prefs.getBoolean("sidebar_on_left", false)
         // Load saved repeatMode (Default to REPEAT_MODE_ALL if not saved)
         _repeatMode.value = prefs.getInt("repeat_mode", Player.REPEAT_MODE_ALL)
+        // Load saved shuffleMode (Default to false)
+        _isShuffleEnabled.value = prefs.getBoolean("shuffle_enabled", false)
         // REMOVED: loadGaplessSetting()
-        loadFavorites() 
-        
+        loadFavorites()
+        loadSongStatistics() // Load song statistics for recommendation engine 
+        loadRecommendationState() // Load recommendation state
+                
         // Load Repository Data
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _userPlaylists.value = playlistRepository.loadPlaylists()

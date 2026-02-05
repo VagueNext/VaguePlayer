@@ -13,6 +13,8 @@ class PlaylistRepository(private val context: Context) {
     
     private val playlistFile = File(context.filesDir, "user_playlists.json")
     private val playCountsFile = File(context.filesDir, "play_counts.json")
+    private val statsFile = File(context.filesDir, "song_statistics.json")
+    private val recommendationFile = File(context.filesDir, "daily_recommendation.json")
 
     private val gson: Gson = GsonBuilder()
         .registerTypeAdapter(Uri::class.java, UriTypeAdapter())
@@ -90,6 +92,50 @@ class PlaylistRepository(private val context: Context) {
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        }
+    }
+
+    // --- Song Statistics (For Recommendation Engine) ---
+    
+    fun saveSongStatistics(stats: Map<Long, com.vagueplayer.music.data.model.SongStatistics>) {
+        try {
+            val json = gson.toJson(stats)
+            statsFile.writeText(json)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun loadSongStatistics(): Map<Long, com.vagueplayer.music.data.model.SongStatistics> {
+        if (!statsFile.exists()) return emptyMap()
+        return try {
+            val type = object : TypeToken<Map<Long, com.vagueplayer.music.data.model.SongStatistics>>() {}.type
+            gson.fromJson(statsFile.readText(), type) ?: emptyMap()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyMap()
+        }
+    }
+
+    // --- Daily Recommendation State ---
+
+    fun saveRecommendationState(state: com.vagueplayer.music.data.model.RecommendationState) {
+        try {
+            val json = gson.toJson(state)
+            recommendationFile.writeText(json)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun loadRecommendationState(): com.vagueplayer.music.data.model.RecommendationState {
+        if (!recommendationFile.exists()) return com.vagueplayer.music.data.model.RecommendationState()
+        return try {
+            gson.fromJson(recommendationFile.readText(), com.vagueplayer.music.data.model.RecommendationState::class.java) 
+                ?: com.vagueplayer.music.data.model.RecommendationState()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            com.vagueplayer.music.data.model.RecommendationState()
         }
     }
 

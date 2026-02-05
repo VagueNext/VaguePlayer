@@ -246,12 +246,35 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                                     )
                                     Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp).padding(start = 8.dp), tint = Color.Gray)
                                 }
-                                Text(
-                                    text = "${playlist.songs.size} 首歌",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.Gray,
+                                
+                                // Metadata Row
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(top = 4.dp)
-                                )
+                                ) {
+                                    Text(
+                                        text = "${playlist.songs.size} 首歌",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.Gray
+                                    )
+                                    
+                                    // [NEW] Refresh Time for Daily Recommendations
+                                    if (playlist.id == "daily_recommend") {
+                                        val recommendationState by viewModel.recommendationState.collectAsState()
+                                        val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                                        val timeString = timeFormat.format(java.util.Date(recommendationState.lastRefreshTime))
+                                        
+                                        Text(
+                                            text = " • 刷新于 $timeString",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Thin,
+                                                fontSize = 11.sp
+                                            ),
+                                            color = Color.Gray.copy(alpha = 0.8f),
+                                            modifier = Modifier.padding(start = 4.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
     

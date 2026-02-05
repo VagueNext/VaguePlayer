@@ -54,6 +54,7 @@ fun PlaylistScreen(
     val context = LocalContext.current
     val viewModel: AudioViewModel = viewModel(factory = AudioViewModelFactory(context))
     val playlists by viewModel.userPlaylists.collectAsState()
+    val dailyRecommendations by viewModel.dailyRecommendations.collectAsState() // [NEW]
 
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     
@@ -81,6 +82,86 @@ fun PlaylistScreen(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // [NEW] Fixed Daily Recommendations Card (Pinned)
+            item {
+                Box(modifier = Modifier) {
+                     // Construct a fake/proxy Playlist object for visual consistency is one way,
+                     // but explicitly calling the card composable is clearer.
+                     // We reuse SimplePlaylistCard logic but with manual data.
+                     
+                     // Helper variables
+                     val firstSong = dailyRecommendations.firstOrNull()
+                     
+                     // Create Virtual Playlist
+                     // Use remember to avoid recreating on every recomposition unless recomm changes
+                     val dailyPlaylist = remember(dailyRecommendations) {
+                         Playlist(
+                             id = "daily_recommend",
+                             name = "每日推荐",
+                             songs = ArrayList(dailyRecommendations)
+                         )
+                     }
+                     
+                     Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bouncyClickable(
+                                targetScale = 0.95f, 
+                                onClick = { onPlaylistClick(dailyPlaylist) },
+                                onLongClick = { /* No-op (Not deletable) */ }
+                            ),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Cover
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                // Dynamic Cover from first song
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(firstSong?.albumArtUri)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                
+                                // Optional Overlay text per design? User said "Same as playlist card"
+                                // Standard playlist card has no overlay text on image.
+                            }
+                
+                            // Info
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                            ) {
+                                Text(
+                                    text = "每日推荐",
+                                    fontSize = 16.sp,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    color = Color.Black
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "根据你的音乐口味生成",
+                                    fontSize = 10.sp, // Slightly smaller for subtitle
+                                    color = com.vagueplayer.music.ui.theme.AccentBlue,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             items(playlists) { playlist ->
                 // Track position for menu
                 var cardPosition by remember { mutableStateOf(Offset.Zero) }

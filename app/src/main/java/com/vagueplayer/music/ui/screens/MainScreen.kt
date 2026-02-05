@@ -138,6 +138,8 @@ import androidx.compose.ui.focus.focusRequester
 import com.vagueplayer.music.ui.screens.SettingsScreen
 import com.vagueplayer.music.ui.screens.FolderManagerScreen
 import com.vagueplayer.music.ui.components.liquidGlassLens
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalFoundationApi::class)
@@ -191,6 +193,7 @@ fun MainScreen() {
     var showPlayer by remember { mutableStateOf(false) }
     var showPlaylistGlobal by remember { mutableStateOf(false) }
     var selectedPlaylist by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
+    var showDailyRecommend by remember { mutableStateOf(false) } // [NEW] Daily Recommend State
     var showSettings by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -225,8 +228,6 @@ fun MainScreen() {
     var showPlaylistContextMenu by remember { mutableStateOf(false) }
     var activePlaylistForContextMenu by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
     var playlistContextMenuAnchor by remember { mutableStateOf(Offset.Zero) }
-
-    // Hoisted Repeat Menu State
     var showRepeatMenu by remember { mutableStateOf(false) }
     var repeatMenuAnchor by remember { mutableStateOf(Offset.Zero) }
     // Loop Count Dialog State
@@ -319,7 +320,7 @@ fun MainScreen() {
     val isAnyOverlayVisible = showSettings || showPlaylistMenu || showRepeatMenu || showSortMenu || 
                               showPlaylistGlobal || showDeleteConfirm || showCreatePlaylistDialog || 
                               showAddToPlaylist || showFavoritesOverlay || showRecentOverlay || 
-                              showRemovedOverlay || showLoopCountDialog
+                              showRemovedOverlay || showLoopCountDialog || showDailyRecommend
 
     // Force Dock Expansion in Sub-screens
     // When Settings or Playlist Detail is open, we want the player to be prominent (Expanded).
@@ -532,6 +533,7 @@ fun MainScreen() {
                                         size?.let { songMenuSize = it } ?: run { songMenuSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp) }
                                         showSongMenu = true
                                     }
+                                    // Removed onDailyRecommendClick
                                 )
                                     // [Refactor] Wrap in AnimatedVisibility for Shared Element Scope & Fade Out
                                     1 -> { 
@@ -602,6 +604,8 @@ fun MainScreen() {
                     }
                 }
             }
+
+            
         } // End Search/Pager Wrapper
         // -------------------------------------------------------------------------
         // SINK LAYER: Glass Overlays & Dialogs (Must be Siblings of Source)
