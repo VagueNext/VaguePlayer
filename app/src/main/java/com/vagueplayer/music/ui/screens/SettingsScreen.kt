@@ -138,14 +138,7 @@ fun SettingsScreen(
                             checked = isMixAudioEnabled,
                             onCheckedChange = { viewModel.setMixAudioEnabled(it) }
                         )
-                        
-                        val isGaplessEnabled by viewModel.isGaplessEnabled.collectAsState()
-                        SettingsSwitchItem(
-                            title = "无缝播放",
-                            subtitle = "自动跳过首尾静音片段 切歌时声音不间断",
-                            checked = isGaplessEnabled,
-                            onCheckedChange = { viewModel.setGaplessEnabled(it) }
-                        )
+                        // REMOVED: Gapless switch (ExoPlayer handles gapless by default)
                     }
                 }
 

@@ -499,11 +499,13 @@ class AudioViewModel(
                 // Sync initial state
                 mediaController?.let { controller ->
                     _isPlaying.value = controller.isPlaying
-                    _repeatMode.value = controller.repeatMode
+                    // FIXED: Don't read from controller, use saved value instead
+                    // Apply saved repeatMode to Service
+                    controller.repeatMode = _repeatMode.value
                     
                     // Sync Settings to Service
                     setMixAudioEnabled(_isMixAudioEnabled.value)
-                    setGaplessEnabled(_isGaplessEnabled.value) // Sync Gapless
+                    // REMOVED: Gapless sync (ExoPlayer handles gapless by default)
                     
                     // Restore current song if possible, or just wait for listener
                     tryRestoreState() // Try restoring after controller connects
@@ -753,29 +755,7 @@ class AudioViewModel(
         mediaController?.sendCustomCommand(command, args)
     }
 
-    // Gapless Playback (Silence Skipping)
-    private val _isGaplessEnabled = MutableStateFlow(false)
-    val isGaplessEnabled: StateFlow<Boolean> = _isGaplessEnabled.asStateFlow()
-
-    fun setGaplessEnabled(enabled: Boolean) {
-        _isGaplessEnabled.value = enabled
-        // Persist
-        prefs.edit().putBoolean("gapless_enabled", enabled).apply()
-        
-        // Send command to Service
-        val command = androidx.media3.session.SessionCommand("SET_GAPLESS", android.os.Bundle.EMPTY)
-        val args = android.os.Bundle().apply { putBoolean("enabled", enabled) }
-        mediaController?.sendCustomCommand(command, args)
-    }
-    
-    // Call this during init or loadSettings
-    private fun loadGaplessSetting() {
-        val enabled = prefs.getBoolean("gapless_enabled", false) // Default OFF
-        _isGaplessEnabled.value = enabled
-        
-        // We might need to sync this when controller connects, handled in initializeMediaController if we add it there.
-        // For now, let's just hold the state. Controller sync needs to happen in onConnect callback ideally or after connection.
-    }
+    // REMOVED: Gapless Playback control (ExoPlayer provides gapless playback by default)
 
     // Favorites State
     private val _favoriteIds = MutableStateFlow<Set<Long>>(emptySet())
@@ -809,7 +789,7 @@ class AudioViewModel(
 
     private fun loadFavorites() {
         loadHiddenPaths() // Load hidden paths too
-        loadGaplessSetting() // Load gapless setting
+        // REMOVED: loadGaplessSetting()
         val saved = prefs.getStringSet("favorite_ids", emptySet()) ?: emptySet()
         _hiddenPaths.value = prefs.getStringSet("hidden_paths", emptySet()) ?: emptySet() // Re-load to be sure
         _favoriteIds.value = saved.mapNotNull { it.toLongOrNull() }.toSet()
@@ -1188,8 +1168,8 @@ class AudioViewModel(
     }
     
     // Repeat Mode
-    // Default to REPEAT_MODE_ALL (Playlist Loop) as per user request
-    private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_ALL)
+    // Repeat Mode: Loaded from SharedPreferences (No hardcoded default)
+    private val _repeatMode = MutableStateFlow<Int>(Player.REPEAT_MODE_ALL) // Temporary initial value, will be overridden in init
     val repeatMode: StateFlow<Int> = _repeatMode.asStateFlow()
 
     private val _isShuffleEnabled = MutableStateFlow(false)
@@ -1205,6 +1185,9 @@ class AudioViewModel(
             }
             it.repeatMode = nextMode
             _repeatMode.value = nextMode
+            
+            // Save repeatMode to SharedPreferences
+            prefs.edit().putInt("repeat_mode", nextMode).apply()
             
             // Sync Shuffle state if Repeat All is forced (usually disables shuffle logic visually)
             // But here we rely on isShuffleEnabled flag.
@@ -1236,6 +1219,7 @@ class AudioViewModel(
             controller.shuffleModeEnabled = true
             _repeatMode.value = Player.REPEAT_MODE_OFF // UI Mapping needed?
             _isShuffleEnabled.value = true
+            prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_OFF).apply()
             return
         }
 
@@ -1252,12 +1236,14 @@ class AudioViewModel(
             controller.repeatMode = Player.REPEAT_MODE_ALL
             _isShuffleEnabled.value = false
             _repeatMode.value = Player.REPEAT_MODE_ALL
+            prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_ALL).apply()
         } else {
              when (repeat) {
                  Player.REPEAT_MODE_ALL -> {
                      // Repeat All -> Repeat One
                      controller.repeatMode = Player.REPEAT_MODE_ONE
                      _repeatMode.value = Player.REPEAT_MODE_ONE
+                     prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_ONE).apply()
                  }
                  Player.REPEAT_MODE_ONE -> {
                      // Repeat One -> Shuffle
@@ -1267,6 +1253,7 @@ class AudioViewModel(
                      
                      _repeatMode.value = Player.REPEAT_MODE_ALL // UI shows Loop All + Shuffle
                      _isShuffleEnabled.value = true
+                     prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_ALL).apply()
                  }
                  else -> { 
                      // Off/Default -> Shuffle (Entry)
@@ -1274,6 +1261,7 @@ class AudioViewModel(
                      controller.shuffleModeEnabled = true
                      _repeatMode.value = Player.REPEAT_MODE_ALL
                      _isShuffleEnabled.value = true
+                     prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_ALL).apply()
                  }
              }
         }
@@ -1297,6 +1285,7 @@ class AudioViewModel(
             // 2. Set Repeat to ALL (for Infinite Playback)
             controller.repeatMode = Player.REPEAT_MODE_ALL
             _repeatMode.value = Player.REPEAT_MODE_ALL
+            prefs.edit().putInt("repeat_mode", Player.REPEAT_MODE_ALL).apply()
             
             // 3. Ensure Queue reflects "Visual Order" (Timeline order)
             // If the queue was already sorted, we leave it alone.
@@ -1409,7 +1398,9 @@ class AudioViewModel(
     init {
         // Load Persisted Settings
         _isSidebarOnLeft.value = prefs.getBoolean("sidebar_on_left", false)
-        loadGaplessSetting()
+        // Load saved repeatMode (Default to REPEAT_MODE_ALL if not saved)
+        _repeatMode.value = prefs.getInt("repeat_mode", Player.REPEAT_MODE_ALL)
+        // REMOVED: loadGaplessSetting()
         loadFavorites() 
         
         // Load Repository Data

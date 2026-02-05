@@ -29,8 +29,7 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
         
-        // User Request: "Default to Playlist Loop"
-        player.repeatMode = Player.REPEAT_MODE_ALL
+        // REMOVED: Default repeatMode (Now controlled by ViewModel state restoration)
 
         // Create MediaSession
         mediaSession = MediaSession.Builder(this, player)
@@ -64,14 +63,7 @@ class PlaybackService : MediaSessionService() {
                     androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS)
                 )
             }
-            if (customCommand.customAction == "SET_GAPLESS") {
-                val isGapless = args.getBoolean("enabled", false)
-                player.skipSilenceEnabled = isGapless
-                
-                 return com.google.common.util.concurrent.Futures.immediateFuture(
-                    androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS)
-                )
-            }
+            // REMOVED: SET_GAPLESS command (gapless playback is default in ExoPlayer)
             return super.onCustomCommand(session, controller, customCommand, args)
         }
     }
