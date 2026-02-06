@@ -148,6 +148,7 @@ data class SongStatistics(
 
 data class RecommendationState(
     val lastRefreshTime: Long = 0,
+    val nextRefreshTime: Long = 0, // Target time for next refresh (e.g., Now + 8 Hours)
     val recommendedSongIds: List<Long> = emptyList(),
     val recommendationReasons: Map<Long, String> = emptyMap() // SongID -> Reason (e.g., "From Hot Pool", "Rediscover")
 )

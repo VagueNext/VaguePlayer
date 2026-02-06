@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive // [NEW] Explicit Import
+import kotlinx.coroutines.Job // [NEW] Explicit Import
+import java.util.Calendar
 
 data class LyricLine(
     val timeMs: Long,
@@ -874,35 +876,24 @@ class AudioViewModel(
         }
     }
 
+    private var refreshJob: Job? = null
+
     fun refreshDailyRecommendations(force: Boolean = false) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
             val currentState = _recommendationState.value
             val now = System.currentTimeMillis()
             
-            // Check if refresh is needed (6:00 AM cutoff)
-            val cal = java.util.Calendar.getInstance()
-            cal.timeInMillis = now
-            val currentDay = cal.get(java.util.Calendar.DAY_OF_YEAR)
-            val currentYear = cal.get(java.util.Calendar.YEAR)
+            // Logic: Refresh Interval is 8 Hours
+            val interval = 8L * 60 * 60 * 1000 // 8 Hours
             
-            cal.timeInMillis = currentState.lastRefreshTime
-            val lastDay = cal.get(java.util.Calendar.DAY_OF_YEAR)
-            val lastYear = cal.get(java.util.Calendar.YEAR)
+            // 1. Should refresh if forced OR now >= nextRefreshTime 
+            // 2. Backward compatibility: if nextRefreshTime is 0, check if lastRefresh is older than interval
             
-            // Logic: If last refresh was NOT today (considering 6am start of day), refresh.
-            // Simplified: If not same day, refresh.
-            // Better: If now > 6:00 and lastRefresh < Today 6:00
+            val isLegacy = currentState.nextRefreshTime == 0L
+            val legacyExpired = isLegacy && (now - currentState.lastRefreshTime >= interval)
+            val timeReached = !isLegacy && (now >= currentState.nextRefreshTime)
             
-            val today6am = java.util.Calendar.getInstance().apply {
-                set(java.util.Calendar.HOUR_OF_DAY, 6)
-                set(java.util.Calendar.MINUTE, 0)
-                set(java.util.Calendar.SECOND, 0)
-                set(java.util.Calendar.MILLISECOND, 0)
-            }.timeInMillis
-
-            val shouldRefresh = force || 
-                               (now >= today6am && currentState.lastRefreshTime < today6am) ||
-                               currentState.recommendedSongIds.isEmpty()
+            val shouldRefresh = force || legacyExpired || timeReached || currentState.recommendedSongIds.isEmpty()
 
             if (shouldRefresh) {
                 // Wait for songs to be loaded if needed
@@ -911,18 +902,62 @@ class AudioViewModel(
                 val result = recommendationEngine.generateDailyRecommendations(
                     _allSongs.value,
                     _songStatistics.value,
-                    currentDevice = null // Device detection will be enhanced later
+                    currentDevice = null 
                 )
+                
+                // Next refresh is 8 hours from NOW
+                val nextRefreshTime = now + interval
                 
                 val newState = RecommendationState(
                     lastRefreshTime = now,
+                    nextRefreshTime = nextRefreshTime,
                     recommendedSongIds = result.songs.map { it.id },
                     recommendationReasons = result.reasons
                 )
                 
                 _recommendationState.value = newState
                 playlistRepository.saveRecommendationState(newState)
-                Log.d("AudioViewModel", "Daily Recommendations Refreshed. Count: ${result.songs.size}")
+                Log.d("AudioViewModel", "Daily Recommendations Refreshed. Next auto-refresh: ${java.util.Date(nextRefreshTime)}")
+                
+                // Schedule the next auto-refresh
+                scheduleNextAutoRefresh(nextRefreshTime)
+            } else {
+                // If we don't refresh, ensure we have a valid target time scheduled
+                var targetTime = currentState.nextRefreshTime
+                if (targetTime == 0L) {
+                    // Legacy state fix: set next time relative to LAST refresh
+                    targetTime = currentState.lastRefreshTime + interval
+                    
+                    // If that time already passed but we didn't refresh (e.g. slight race or just below threshold),
+                    // allow immediate refresh on next check or just set to now + interval?
+                    // Safe approach: if passed, next check will trigger refresh effectively.
+                    if (targetTime < now) targetTime = now // Should have refreshed, but ensure valid future time if logic dictates
+                    
+                    val silentState = currentState.copy(nextRefreshTime = targetTime)
+                    _recommendationState.value = silentState
+                    playlistRepository.saveRecommendationState(silentState)
+                }
+                
+                scheduleNextAutoRefresh(targetTime)
+            }
+        }
+    }
+    
+    // [NEW] Foreground Scheduler
+    // Waits until target time then forces a refresh if app is still alive
+    private fun scheduleNextAutoRefresh(targetTime: Long) {
+        refreshJob?.cancel() // Cancel previous waiter
+        refreshJob = viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val delayMs = targetTime - now
+            if (delayMs > 0) {
+                Log.d("AudioViewModel", "Scheduling Next Refresh in ${delayMs / 1000 / 60} minutes")
+                kotlinx.coroutines.delay(delayMs)
+                // Time up! Force check/refresh
+                if (isActive) {
+                    Log.d("AudioViewModel", "Auto-Refresh Timer Triggered")
+                    checkDailyRefresh()
+                }
             }
         }
     }
@@ -1047,8 +1082,18 @@ class AudioViewModel(
         }
     }
 
-    private fun checkDailyRefresh() {
-        refreshDailyRecommendations(force = false)
+    // [UPDATED] Public for Lifecycle Hook
+    fun checkDailyRefresh() {
+        val currentState = _recommendationState.value
+        val now = System.currentTimeMillis()
+        
+        // Simple efficient check: Is it time yet?
+        if (now >= currentState.nextRefreshTime) {
+            refreshDailyRecommendations(force = false)
+        } else {
+            // Re-schedule if needed (e.g. app was killed and restarted before time)
+            scheduleNextAutoRefresh(currentState.nextRefreshTime)
+        }
     }
 
     fun toggleFavorite(songId: Long) {
@@ -1593,6 +1638,7 @@ class AudioViewModel(
         }
         
         initializeMediaController()
+        
         
         // Auto-Scan if folders are configured
         viewModelScope.launch {

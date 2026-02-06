@@ -2,6 +2,9 @@
 
 import android.Manifest
 import android.os.Build
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import dev.chrisbanes.haze.HazeState
@@ -182,6 +185,23 @@ fun MainScreen() {
     val factory = remember { com.vagueplayer.music.viewmodel.AudioViewModelFactory(context) }
     val audioViewModel: com.vagueplayer.music.viewmodel.AudioViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = factory)
 
+    // [NEW] Lifecycle Observer for Daily Refresh
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                audioViewModel.checkDailyRefresh()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // [NEW] Collect Daily Recommendations for Reactive Updates
+    val dailyRecommendations by audioViewModel.dailyRecommendations.collectAsState()
+
     // Top-Level State
     var currentPage by remember { mutableIntStateOf(0) }
     var playerBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
@@ -193,6 +213,18 @@ fun MainScreen() {
     var showPlayer by remember { mutableStateOf(false) }
     var showPlaylistGlobal by remember { mutableStateOf(false) }
     var selectedPlaylist by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
+    
+    // [NEW] Reactive Update: If Daily Recommendations change while viewing them, update the view
+    LaunchedEffect(dailyRecommendations) {
+        if (selectedPlaylist?.id == "daily_recommend") {
+             // Re-construct the playlist object to trigger UI update
+             selectedPlaylist = com.vagueplayer.music.data.model.Playlist(
+                 id = "daily_recommend",
+                 name = "每日推荐",
+                 songs = ArrayList(dailyRecommendations)
+             )
+        }
+    }
     var showDailyRecommend by remember { mutableStateOf(false) } // [NEW] Daily Recommend State
     var showSettings by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
@@ -316,41 +348,36 @@ fun MainScreen() {
     }
 
 
-    // Unified Overlay Check for Global UI logic (Back Button, Focus, etc.)
+    // [FIX] Helper to check if any glass dialog is active
+    // Consolidating all overlay states + global playlist delete state
+    val playlistToDelete by audioViewModel.playlistToDelete.collectAsState()
     val isAnyOverlayVisible = showSettings || showPlaylistMenu || showRepeatMenu || showSortMenu || 
                               showPlaylistGlobal || showDeleteConfirm || showCreatePlaylistDialog || 
                               showAddToPlaylist || showFavoritesOverlay || showRecentOverlay || 
-                              showRemovedOverlay || showLoopCountDialog || showDailyRecommend
+                              showRemovedOverlay || showLoopCountDialog || showDailyRecommend ||
+                              (playlistToDelete != null) // Include global delete dialog
 
+    // [FIX] Ensure Search Text is updated
+    
     // Force Dock Expansion in Sub-screens
-    // When Settings or Playlist Detail is open, we want the player to be prominent (Expanded).
     val effectiveCollapseProgress = if (isAnyOverlayVisible) 0f else dockCollapseAnimatable.value
     
     // Consolidate Dock Visibility
-    // The dock should only hide if the full Player is visible.
-    // It should stay visible in Search (Mini Mode), Settings, and Playlists.
     val isDockVisible = !showPlayer
-    val dockCollapseProgress = dockCollapseAnimatable.value
     
-    // Glass Config (Now using LiquidGlassDefaults globally) 
-
     // Selection State
     val isSelectionMode by audioViewModel.isSelectionMode.collectAsState()
     val selectedIds by audioViewModel.selectedIds.collectAsState()
     val songs by audioViewModel.songs.collectAsState()
-    
     val favoriteIds by audioViewModel.favoriteIds.collectAsState()
     val playCounts by audioViewModel.playCounts.collectAsState()
-    
 
     // Search State
     var searchText by remember { mutableStateOf("") }
-    // val searchResults REMOVED (Replaced by searchUiState)
-    
+
     LaunchedEffect(searchText) {
         audioViewModel.updateSearchQuery(searchText)
     }
-
 
     @OptIn(ExperimentalSharedTransitionApi::class)
     SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
@@ -361,37 +388,59 @@ fun MainScreen() {
         ) {
         
          // Animate distortion strength: Fade out when Player is open to prevent full-screen glitch
-        val targetDistortion = if (showPlayer) 0f else 45f
+         // Animate distortion strength: Fade out when Player is open to prevent full-screen glitch
+        // [FIX] Keep distortion active if an Overlay (Dialog) is visible (reporting bounds), even if Player is open.
+        val targetDistortion = if (showPlayer && overlayBounds == null) 0f else 45f
         val animatedDistortion by animateFloatAsState(
             targetValue = targetDistortion,
             animationSpec = tween(300), 
             label = "glassDistortion"
         )
 
-        // WRAPPER BOX for Content
+        // WRAPPER BOX (ROOT CONTAINER) - NO LENS HERE
         Box(
              modifier = Modifier
                 .fillMaxSize()
-                .liquidGlassLens(
-                    bounds1 = playerBounds,
-                    bounds2 = navBounds,
-                    bounds3 = searchBounds,
-                    bounds4 = overlayBounds,
-                    distortionStrength = animatedDistortion, 
-                    edgeWidth = 60f,
-                    fusionStrength = 35f,
-                    aberrationStrength = 0.3f,
-                    tint = Color.White.copy(alpha = 0.80f),
-                    enableShader = true
-                )
         ) {
         
         // -------------------------------------------------------------------------
-        // SOURCE LAYER: Content to be blurred
+        // SOURCE LAYER: Content to be blurred (LENS APPLIED HERE)
         // -------------------------------------------------------------------------
+        // [FIX] Coordinate Normalization
+        // We need to shift global bounds (boundsInRoot) to local bounds for the shader.
+        var rootOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .onGloballyPositioned { rootOffset = it.boundsInRoot().topLeft }
+                .liquidGlassLens(
+                    // [FIX] Translate global bounds to local bounds using rootOffset
+                    bounds1 = (if (showPlayer) null else playerBounds)?.translate(-rootOffset.x, -rootOffset.y),
+                    bounds2 = (if (showPlayer) null else navBounds)?.translate(-rootOffset.x, -rootOffset.y),
+                    bounds3 = (if (showPlayer) null else searchBounds)?.translate(-rootOffset.x, -rootOffset.y),
+                    // [FIX] RE-COUPLE Dialog to Global Lens.
+                    // Now that coordinates are fixed, we MUST use Global Lens to distort the background.
+                    bounds4 = overlayBounds?.translate(-rootOffset.x, -rootOffset.y),
+                    
+                    // [FIX] Dynamic Corner Radius
+                    // User Request: Dock = 32dp. Dialog = 32dp. 
+                    // Unified radius for all glass elements.
+                    cornerRadius = 32.dp,
+
+                    distortionStrength = animatedDistortion, 
+                    // [FIX] Increase edge width for Dialogs to ensure full-body distortion.
+                    // Dock (small) = 60f. Dialog (large) = 300f.
+                    // [User Revert] Edge width back to 60f.
+                    // This creates a sharper, more defined glass edge rather than a wide diffuse one.
+                    edgeWidth = 60f,
+                    fusionStrength = 35f,
+                    aberrationStrength = 0.3f,
+                    // [FIX] Restore 0.8f Tint (White Base)
+                    // This determines the base "Milky" color of the distortion zone (Dock, Nav, Dialog).
+                    tint = Color.White.copy(alpha = 0.80f),
+                    enableShader = true
+                )
         ) {
             // Inner Box for Haze Source Capture (Raw Content)
             Box(
@@ -1303,26 +1352,6 @@ fun MainScreen() {
 
 
 
-        // Global Playlist Delete Dialog (Hoisted)
-        val playlistToDelete by audioViewModel.playlistToDelete.collectAsState()
-        if (playlistToDelete != null) {
-            com.vagueplayer.music.ui.components.GlassAlertDialog(
-                title = "删除歌单",
-                description = "确定要删除歌单 '${playlistToDelete!!.name}' 吗？",
-                icon = null, // Removed icon to match reference style
-                confirmText = "删除",
-                cancelText = "取消",
-                hazeState = mainHazeState,
-                onConfirm = {
-                    audioViewModel.confirmDeletePlaylist()
-                    overlayBounds = null
-                },
-                onDismiss = { 
-                    audioViewModel.cancelDeletePlaylist()
-                    overlayBounds = null
-                }
-            )
-        }
 
 
 
@@ -1579,6 +1608,31 @@ fun MainScreen() {
              viewModel = audioViewModel,
              isVisible = showPlaylistGlobal, 
              onDismiss = { showPlaylistGlobal = false }
+        )
+    }
+
+    // Global Playlist Delete Dialog (Hoisted & Undistorted)
+    val playlistToDelete by audioViewModel.playlistToDelete.collectAsState()
+    if (playlistToDelete != null) {
+        com.vagueplayer.music.ui.components.GlassAlertDialog(
+            title = "删除歌单",
+            description = "确定要删除歌单 '${playlistToDelete!!.name}' 吗？",
+            icon = null, // Removed icon to match reference style
+            confirmText = "删除",
+            cancelText = "取消",
+            hazeState = mainHazeState,
+            onConfirm = {
+                audioViewModel.confirmDeletePlaylist()
+                overlayBounds = null
+            },
+            onDismiss = { 
+                audioViewModel.cancelDeletePlaylist()
+                overlayBounds = null
+            },
+            // [CRITICAL] Capture bounds for Global Distortion
+            onLayoutCoordinates = { 
+                overlayBounds = it.boundsInRoot()
+            }
         )
     }
 

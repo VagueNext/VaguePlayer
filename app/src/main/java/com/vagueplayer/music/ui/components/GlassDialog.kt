@@ -10,33 +10,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.ui.layout.onGloballyPositioned
-import com.vagueplayer.music.ui.theme.AccentBlue
-import com.vagueplayer.music.ui.components.simpleGlass
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeChild
-import dev.chrisbanes.haze.HazeStyle
+import androidx.compose.material.icons.filled.Timer
 
 /**
  * A reusable iOS-style Glass Dialog component.
- * Reference: Apple Vision Pro / iOS Glass Alert.
+ * Rewritten to strictly match [UnifiedGlassDock]'s architecture.
  */
 @Composable
 fun GlassDialog(
     blurRadius: androidx.compose.ui.unit.Dp = LiquidGlassDefaults.BlurRadius,
     tint: androidx.compose.ui.graphics.Color = LiquidGlassDefaults.Tint,
-    enableShader: Boolean = true, // Kept for API compatibility, though shader unused
+    enableShader: Boolean = true,
     hazeState: HazeState? = null,
     onDismissRequest: () -> Unit,
     title: String,
@@ -49,305 +41,157 @@ fun GlassDialog(
     onCancel: () -> Unit = onDismissRequest,
     onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null
 ) {
-    // Inline Dialog to allow Glass Refraction (RenderEffect requires same Window)
+    // Inline Dialog to allow Glass Refraction
     androidx.activity.compose.BackHandler(onBack = onDismissRequest)
-
-    // [RESTORED] Use hazeChild to blur the background content from the global haze source
-    // The global .haze() in MainScreen provides the source content
 
     Box(
         modifier = Modifier
-            .zIndex(200f) // Ensure it sits above other content
+            .zIndex(200f) // Top Layer
             .fillMaxSize()
-            .then(
-                if (hazeState != null) {
-                    Modifier.hazeChild(
-                        state = hazeState,
-                        style = HazeStyle(
-                            backgroundColor = Color.White,
-                            tint = dev.chrisbanes.haze.HazeTint(
-                                color = Color.Black.copy(alpha = 0.4f)
-                            ),
-                            blurRadius = 10.dp,
-                            noiseFactor = 0f
-                        )
-                    )
-                } else {
-                    Modifier.background(Color.Black.copy(alpha = 0.4f))
-                }
-            )
+            // No Scrim (Darkening) as requested, relying on Glass Effect
             .clickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null
             ) { onDismissRequest() },
         contentAlignment = Alignment.Center
     ) {
-            // The Glass Card
+        // THE GLASS CARD CONTAINER
+        Box(
+            modifier = Modifier
+                .width(280.dp)
+                // Report bounds here for the Global Distortion Lens (MainScreen)
+                .onGloballyPositioned { onLayoutCoordinates?.invoke(it) }
+                .clickable(enabled = false) {}
+        ) {
+            // LAYER 1: GLASS BACKGROUND (Visuals)
             Box(
                 modifier = Modifier
-                    .width(280.dp)
-                    .clip(RoundedCornerShape(32.dp)) 
-                    .clickable(enabled = false) {}
-            ) {
-                // 1. BACKGROUND LAYER
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .onGloballyPositioned { onLayoutCoordinates?.invoke(it) }
-                        .simpleGlass(
-                            cornerRadius = 32.dp,
-                            distortionStrength = 40f, 
-                            edgeWidth = 5f
-                        )
-                )
-
-                // 2. CONTENT LAYER
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Icon
-                    if (icon != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(60.dp)
-                                .background(Color.Gray.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = Color.Gray,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-
-                    // Title & Description
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = title,
-                            color = Color.Black,
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                        
-                        if (description != null) {
-                            Text(
-                                text = description,
-                                color = Color.Black.copy(alpha = 0.7f),
-                                fontSize = 15.sp,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 20.sp
-                            )
-                        }
-                    }
-
-                    // Content
-                    if (content != null) {
-                        Box(modifier = Modifier.padding(vertical = 8.dp)) {
-                            content()
-                        }
-                    }
-
-                    // Action Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (cancelText != null) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(100)) 
-                                    .background(Color.Black.copy(alpha = 0.05f))
-                                    .clickable { onCancel() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = cancelText,
-                                    color = Color.Black,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 16.sp
-                                )
-                            }
-                        }
-
-                        if (onConfirm != null) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(100)) 
-                                    .background(AccentBlue)
-                                    .clickable { onConfirm() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = confirmText ?: "Confirm",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 16.sp
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-}
-
-/**
- * Custom Sleep Timer Dialog
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun SleepTimerDialog(
-    currentTimerMin: Int?, 
-    hazeState: HazeState? = null,
-    onSetTimer: (Int?) -> Unit,
-    onDismiss: () -> Unit
-) {
-
-    // Options: 10, 15, 30
-    val options = listOf(10, 15, 30)
-    var customInput by remember { mutableStateOf(currentTimerMin?.toString() ?: "") }
-    
-    // Derived state for button text
-    val isTimerSet = customInput.toIntOrNull() != null && customInput.toIntOrNull()!! > 0
-
-    GlassDialog(
-        hazeState = hazeState,
-        title = "睡眠定时",
-        description = "自动停止播放...",
-        icon = Icons.Default.Timer,
-        onDismissRequest = onDismiss,
-        confirmText = if (isTimerSet) "开始" else if (currentTimerMin != null) "关闭定时" else null, // Hide if no action
-        onConfirm = if (isTimerSet || currentTimerMin != null) {
-            {
-                val minutes = customInput.toIntOrNull()
-                if (minutes != null && minutes > 0) {
-                    onSetTimer(minutes)
-                } else {
-                    onSetTimer(null) // Turn off if active and input empty/0
-                }
-                onDismiss()
-            }
-        } else null, // Hide if no action
-        cancelText = "取消",
-        content = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 1. Custom Input Field
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.Black.copy(alpha = 0.05f))
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                   if (customInput.isEmpty()) {
-                        Text(
-                            text = "自定义时长 (分钟)",
-                            color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.7f),
-                            fontSize = 16.sp
-                        )
-                    }
-                    androidx.compose.foundation.text.BasicTextField(
-                        value = customInput,
-                        onValueChange = { input ->
-                            // Validate: Digits only, Max 180
-                            if (input.all { it.isDigit() }) {
-                                val num = input.toIntOrNull()
-                                if (num == null || num <= 180) {
-                                    customInput = input
-                                } else {
-                                    customInput = "180"
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            fontSize = 16.sp,
-                            color = Color.Black
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                        )
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(32.dp))
+                    // [UNIFICATION] Force White Glass everywhere.
+                    // Reduces fragmentation between Light/Dark modes. 
+                    // Matches UnifiedGlassDock style.
+                    .background(Color.White.copy(alpha = 0.40f))
+                    .simpleGlass(
+                        cornerRadius = 32.dp,
+                        enableShader = true 
                     )
+            )
+
+            // LAYER 2: CONTENT
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp) // Increased spacing
+            ) {
+                // Icon
+                if (icon != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                 }
 
-                // 2. Preset Options
+                // Text Content
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = title,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    if (description != null) {
+                        Text(
+                            text = description,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            fontSize = 15.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+
+                // Custom Content Slot
+                if (content != null) {
+                    Box(modifier = Modifier.padding(vertical = 8.dp)) {
+                        content()
+                    }
+                }
+
+                // Buttons (Transparent Style)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly 
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                   options.forEach { min ->
-                       val isSelected = customInput == min.toString()
-                       Box(
-                           modifier = Modifier
-                               .weight(1f)
-                               .padding(horizontal = 4.dp)
-                               .clip(RoundedCornerShape(12.dp))
-                               .background(
-                                   if (isSelected) AccentBlue else Color.Black.copy(alpha = 0.05f)
-                               )
-                               .clickable { customInput = min.toString() }
-                               .padding(vertical = 12.dp),
-                           contentAlignment = Alignment.Center
-                       ) {
-                           Text(
-                               "$min m",
-                               color = if (isSelected) Color.White else Color.Black,
-                               fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                           )
-                       }
-                   }
+                    // Cancel Button
+                    if (cancelText != null) {
+                        Button(
+                            onClick = onCancel,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp), // Flexible height
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text(cancelText, fontSize = 15.sp)
+                        }
+                    }
+
+                    // Confirm Button
+                    if (onConfirm != null && confirmText != null) {
+                        Button(
+                            onClick = onConfirm,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp), // Flexible height
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), // Tinted Primary
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text(confirmText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
-    )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun FlowRow(
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
-    content: @Composable () -> Unit
-) {
-    androidx.compose.foundation.layout.FlowRow(
-        modifier = modifier,
-        horizontalArrangement = horizontalArrangement,
-        verticalArrangement = verticalArrangement,
-        content = { content() }
-    )
+    }
 }
 
 /**
- * Simplified Glass Alert Dialog (Confirm/Cancel).
+ * Wrapper for simple alerts using GlassDialog (Backward Compatibility)
  */
 @Composable
 fun GlassAlertDialog(
     title: String,
-    description: String,
+    description: String? = null,
     icon: ImageVector? = null,
-    confirmText: String = "确定",
-    cancelText: String = "取消",
+    confirmText: String? = "Confirm",
+    cancelText: String? = "Cancel",
     hazeState: HazeState? = null,
-    onConfirm: () -> Unit,
+    onConfirm: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null
 ) {
@@ -365,59 +209,81 @@ fun GlassAlertDialog(
 }
 
 /**
- * Simplified Glass Input Dialog (TextField).
+ * Specialized Sleep Timer Dialog
  */
 @Composable
-fun GlassInputDialog(
-    title: String,
-    description: String? = null,
-    initialValue: String = "",
-    placeholder: String = "",
-    icon: ImageVector? = null,
-    confirmText: String = "保存",
-    cancelText: String = "取消",
+fun SleepTimerDialog(
     hazeState: HazeState? = null,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
+    currentTimerMin: Int?,
+    onSetTimer: (Int?) -> Unit,
+    onDismiss: () -> Unit,
+    onLayoutCoordinates: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null
 ) {
-    var text by remember { mutableStateOf(initialValue) }
-
     GlassDialog(
+        title = "睡眠定时",
+        description = "自动停止播放...",
         hazeState = hazeState,
-        title = title,
-        description = description,
-        icon = icon,
-        confirmText = confirmText,
-        cancelText = cancelText,
-        onConfirm = { onConfirm(text) },
+        icon = androidx.compose.material.icons.Icons.Filled.Timer, // Default icon
         onDismissRequest = onDismiss,
+        confirmText = null, // Custom content handles actions
+        cancelText = "取消",
+        onLayoutCoordinates = onLayoutCoordinates,
         content = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.05f))
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.CenterStart
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (text.isEmpty() && placeholder.isNotEmpty()) {
-                    Text(
-                        text = placeholder,
-                        color = Color.Gray.copy(alpha = 0.5f),
-                        fontSize = 16.sp
-                    )
+                // Preset Timers Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    listOf(10, 15, 30).forEach { mins ->
+                        val isSelected = currentTimerMin == mins
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 4.dp)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f) 
+                                )
+                                .clickable { 
+                                    onSetTimer(mins)
+                                    onDismiss()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${mins} m",
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
                 }
-                androidx.compose.foundation.text.BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        fontSize = 16.sp,
-                        color = Color.Black
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                
+                // Custom Input (Simplified for now, or just more presets)
+                // For now sticking to presets as reimplementation.
+                // Or "Off" button if active
+                if (currentTimerMin != null) {
+                     Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.Red.copy(alpha = 0.1f))
+                            .clickable { 
+                                onSetTimer(null) // Cancel timer
+                                onDismiss()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("关闭定时", color = Color.Red, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     )

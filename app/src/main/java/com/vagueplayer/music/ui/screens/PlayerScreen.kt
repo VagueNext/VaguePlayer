@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.List
@@ -264,16 +265,32 @@ fun PlayerScreen(
         label = "LensDist"
     )
 
+    // State for Dialog Distortion
+    var overlayBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black) // Black background safety net. If blur fails, at least text is visible.
+            .background(Color.Black)
             .liquidGlassLens(
-                bounds1 = lensBounds,
-                cornerRadius = 8.dp, // Thumb Radius (16dp height / 2)
-                distortionStrength = lensDistortion,
-                edgeWidth = 12.0f,
-                aberrationStrength = 1.0f 
+                bounds1 = lensBounds, // Slider
+                bounds2 = overlayBounds?.translate(-containerPosition.x, -containerPosition.y), // Dialog (Adjusted for Container)
+                
+                // [Fix] Dynamic Corner Radius
+                // Slider = 8dp. GlassDialog = 32dp.
+                cornerRadius = if (overlayBounds != null) 32.dp else 8.dp, 
+                
+                // Dynamic Distortion: Stronger if Dialog is open
+                distortionStrength = if (overlayBounds != null) 60f else lensDistortion,
+                // [User Revert] EdgeWidth 60f
+                edgeWidth = 60f,
+                
+                // [Fix] Reduce Rainbow Effect (was 1.0f)
+                aberrationStrength = 0.25f,
+                
+                // [Fix] Subtle White Tint to match "Glass" feel, but keeps Dark mode usable
+                tint = Color.White.copy(alpha = 0.10f),
+                enableShader = true
             )
             .graphicsLayer {
                 val scale = 1f - (backProgress * 0.1f)
@@ -772,7 +789,11 @@ fun PlayerScreen(
                      onSetTimer = { min ->
                          viewModel.startSleepTimer(min ?: 0)
                      },
-                     onDismiss = { showSleepTimerDialog = false }
+                     onDismiss = { 
+                         showSleepTimerDialog = false 
+                         overlayBounds = null
+                     },
+                     onLayoutCoordinates = { overlayBounds = it.boundsInRoot() }
                  )
              }
         }
