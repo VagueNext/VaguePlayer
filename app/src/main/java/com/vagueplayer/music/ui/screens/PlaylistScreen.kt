@@ -54,7 +54,9 @@ fun PlaylistScreen(
     val context = LocalContext.current
     val viewModel: AudioViewModel = viewModel(factory = AudioViewModelFactory(context))
     val playlists by viewModel.userPlaylists.collectAsState()
-    val dailyRecommendations by viewModel.dailyRecommendations.collectAsState() // [NEW]
+    
+    val dailyRecommendations by viewModel.dailyRecommendations.collectAsState()
+    val dailyCover by viewModel.dailyRecommendationCover.collectAsState() // [NEW]
 
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     
@@ -70,137 +72,142 @@ fun PlaylistScreen(
         }
     }.value
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier
-                .fillMaxSize()
-                .haze(effectiveHazeState)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 100.dp, bottom = 100.dp),
-            state = gridState,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // [NEW] Fixed Daily Recommendations Card (Pinned)
-            item {
-                Box(modifier = Modifier) {
-                     // Construct a fake/proxy Playlist object for visual consistency is one way,
-                     // but explicitly calling the card composable is clearer.
-                     // We reuse SimplePlaylistCard logic but with manual data.
-                     
-                     // Helper variables
-                     val firstSong = dailyRecommendations.firstOrNull()
-                     
-                     // Create Virtual Playlist
-                     // Use remember to avoid recreating on every recomposition unless recomm changes
-                     val dailyPlaylist = remember(dailyRecommendations) {
-                         Playlist(
-                             id = "daily_recommend",
-                             name = "每日推荐",
-                             songs = ArrayList(dailyRecommendations)
-                         )
-                     }
-                     
-                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .bouncyClickable(
-                                targetScale = 0.95f, 
-                                onClick = { onPlaylistClick(dailyPlaylist) },
-                                onLongClick = { /* No-op (Not deletable) */ }
-                            ),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            // Cover
-                            Box(
+
+    // [FIX] Use Surface for opaque background to prevent bleed-through
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.White
+    ) { 
+        Box(modifier = Modifier.fillMaxSize()) { // [FIX] Re-add Box for alignment scope
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .haze(effectiveHazeState)
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 100.dp, bottom = 100.dp),
+                state = gridState,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // [NEW] Fixed Daily Recommendations Card (Pinned)
+                // Only show if we have recommendations (Engine returns empty if < 100 songs)
+                if (dailyRecommendations.isNotEmpty()) {
+                    item {
+                        Box(modifier = Modifier) {
+                             val dailyPlaylist = remember(dailyRecommendations) {
+                                 Playlist(
+                                     id = "daily_recommend",
+                                     name = "每日推荐",
+                                     songs = ArrayList(dailyRecommendations)
+                                 )
+                             }
+                             
+                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .aspectRatio(1f)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .bouncyClickable(
+                                        targetScale = 0.95f, 
+                                        onClick = { onPlaylistClick(dailyPlaylist) },
+                                        onLongClick = { 
+                                             viewModel.refreshDailyRecommendations(force = true)
+                                             android.widget.Toast.makeText(context, "正在刷新每日推荐...", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    ),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
-                                // Dynamic Cover from first song
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(firstSong?.albumArtUri)
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                                
-                                // Optional Overlay text per design? User said "Same as playlist card"
-                                // Standard playlist card has no overlay text on image.
-                            }
-                
-                            // Info
-                            Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
-                            ) {
-                                Text(
-                                    text = "每日推荐",
-                                    fontSize = 16.sp,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    color = Color.Black
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "根据你的音乐口味生成",
-                                    fontSize = 10.sp, // Slightly smaller for subtitle
-                                    color = com.vagueplayer.music.ui.theme.AccentBlue,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
+                                Column(
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    // Cover
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(1f)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        // Dynamic Cover from Rotating State
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(dailyCover?.albumArtUri) // [Use Rotating Cover]
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        
+                                        // Optional Overlay text per design? User said "Same as playlist card"
+                                    }
+                    
+                                // Info
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                                ) {
+                                    Text(
+                                        text = "每日推荐",
+                                        fontSize = 16.sp,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        color = Color.Black
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "根据你的音乐口味生成",
+                                        fontSize = 10.sp, // Slightly smaller for subtitle
+                                        color = com.vagueplayer.music.ui.theme.AccentBlue,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }
+                    }
                 }
-            }
 
-            items(playlists) { playlist ->
-                // Track position for menu
-                var cardPosition by remember { mutableStateOf(Offset.Zero) }
-                
-                Box(modifier = Modifier.onGloballyPositioned { cardPosition = it.boundsInWindow().center }) {
-                    SimplePlaylistCard(
-                        playlist = playlist,
-                        onClick = { onPlaylistClick(playlist) },
-                        onLongClick = { onContextMenuRequest(playlist, cardPosition) }
-                    )
-                }
-            }
-        }
-
-        com.vagueplayer.music.ui.components.ScreenHeader(
-            title = "歌单",
-            scrollAlpha = scrollAlpha,
-            hazeState = effectiveHazeState,
-            modifier = Modifier.align(Alignment.TopCenter),
-            action = {
-                Box {
-                    var localBtnPos by remember { mutableStateOf(Offset.Zero) }
+                items(playlists) { playlist ->
+                    // Track position for menu
+                    var cardPosition by remember { mutableStateOf(Offset.Zero) }
                     
-                    IconButton(
-                        onClick = { onShowAddMenu(localBtnPos) },
-                        modifier = Modifier.onGloballyPositioned { 
-                            localBtnPos = it.boundsInWindow().topLeft
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Add",
-                            tint = AccentBlue,
-                            modifier = Modifier.size(28.dp)
+                    Box(modifier = Modifier.onGloballyPositioned { cardPosition = it.boundsInWindow().center }) {
+                        SimplePlaylistCard(
+                            playlist = playlist,
+                            onClick = { onPlaylistClick(playlist) },
+                            onLongClick = { onContextMenuRequest(playlist, cardPosition) }
                         )
                     }
                 }
             }
-        )
+
+            com.vagueplayer.music.ui.components.ScreenHeader(
+                title = "歌单",
+                scrollAlpha = scrollAlpha,
+                hazeState = effectiveHazeState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                action = {
+                    Box {
+                        var localBtnPos by remember { mutableStateOf(Offset.Zero) }
+                        
+                        IconButton(
+                            onClick = { onShowAddMenu(localBtnPos) },
+                            modifier = Modifier.onGloballyPositioned { 
+                                localBtnPos = it.boundsInWindow().topLeft
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add",
+                                tint = AccentBlue,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+                }
+            )
+        } // Close Box
     }
 }
 
@@ -264,7 +271,8 @@ fun SimplePlaylistCard(
                     text = "${playlist.songs.size} 首歌曲",
                     fontSize = 13.sp,
                     color = Color.Gray,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
         }

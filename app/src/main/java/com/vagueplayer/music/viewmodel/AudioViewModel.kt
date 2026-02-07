@@ -91,6 +91,19 @@ class AudioViewModel(
     
     private val _showSortDialog = MutableStateFlow(false)
     val showSortDialog = _showSortDialog.asStateFlow()
+
+    // [NEW] Daily Recommendation Cover Rotation
+    private val _dailyCoverIndex = MutableStateFlow(0)
+
+    init {
+        // Start Rotation Timer
+        viewModelScope.launch {
+            while (isActive) {
+                kotlinx.coroutines.delay(15 * 60 * 1000L) // 15 Minutes
+                _dailyCoverIndex.value++
+            }
+        }
+    }
     
     // Sorting
     enum class SortOption {
@@ -868,6 +881,12 @@ class AudioViewModel(
         state.recommendedSongIds.mapNotNull { id -> allSongs.find { it.id == id } }
     }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val dailyRecommendationCover: StateFlow<Song?> = kotlinx.coroutines.flow.combine(
+        _dailyCoverIndex, dailyRecommendations
+    ) { index: Int, songs: List<Song> ->
+        if (songs.isEmpty()) null else songs[index % songs.size]
+    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), null)
+
 
     private fun loadRecommendationState() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -880,67 +899,61 @@ class AudioViewModel(
 
     fun refreshDailyRecommendations(force: Boolean = false) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            val currentState = _recommendationState.value
-            val now = System.currentTimeMillis()
-            
-            // Logic: Refresh Interval is 8 Hours
-            val interval = 8L * 60 * 60 * 1000 // 8 Hours
-            
-            // 1. Should refresh if forced OR now >= nextRefreshTime 
-            // 2. Backward compatibility: if nextRefreshTime is 0, check if lastRefresh is older than interval
-            
-            val isLegacy = currentState.nextRefreshTime == 0L
-            val legacyExpired = isLegacy && (now - currentState.lastRefreshTime >= interval)
-            val timeReached = !isLegacy && (now >= currentState.nextRefreshTime)
-            
-            val shouldRefresh = force || legacyExpired || timeReached || currentState.recommendedSongIds.isEmpty()
-
-            if (shouldRefresh) {
-                // Wait for songs to be loaded if needed
-                if (_allSongs.value.isEmpty()) return@launch
-
-                val result = recommendationEngine.generateDailyRecommendations(
-                    _allSongs.value,
-                    _songStatistics.value,
-                    currentDevice = null 
-                )
-                
-                // Next refresh is 8 hours from NOW
-                val nextRefreshTime = now + interval
-                
-                val newState = RecommendationState(
-                    lastRefreshTime = now,
-                    nextRefreshTime = nextRefreshTime,
-                    recommendedSongIds = result.songs.map { it.id },
-                    recommendationReasons = result.reasons
-                )
-                
-                _recommendationState.value = newState
-                playlistRepository.saveRecommendationState(newState)
-                Log.d("AudioViewModel", "Daily Recommendations Refreshed. Next auto-refresh: ${java.util.Date(nextRefreshTime)}")
-                
-                // Schedule the next auto-refresh
-                scheduleNextAutoRefresh(nextRefreshTime)
-            } else {
-                // If we don't refresh, ensure we have a valid target time scheduled
-                var targetTime = currentState.nextRefreshTime
-                if (targetTime == 0L) {
-                    // Legacy state fix: set next time relative to LAST refresh
-                    targetTime = currentState.lastRefreshTime + interval
-                    
-                    // If that time already passed but we didn't refresh (e.g. slight race or just below threshold),
-                    // allow immediate refresh on next check or just set to now + interval?
-                    // Safe approach: if passed, next check will trigger refresh effectively.
-                    if (targetTime < now) targetTime = now // Should have refreshed, but ensure valid future time if logic dictates
-                    
-                    val silentState = currentState.copy(nextRefreshTime = targetTime)
-                    _recommendationState.value = silentState
-                    playlistRepository.saveRecommendationState(silentState)
-                }
-                
-                scheduleNextAutoRefresh(targetTime)
-            }
-        }
+             val currentState = _recommendationState.value
+             val now = System.currentTimeMillis()
+             
+             // Logic: Refresh Interval is 8 Hours
+             val interval = 8L * 60 * 60 * 1000 
+             
+             // If forcing, ignore time check. Otherwise, respect nextRefreshTime
+             // Also prevent refresh if we just refreshed recently (sanity check)
+             if (!force && now < currentState.nextRefreshTime) {
+                 Log.d("AudioViewModel", "Skipping Daily Recommendations refresh: Not yet time.")
+                 return@launch
+             }
+             
+             Log.d("AudioViewModel", "Refreshing Daily Recommendations (Force=$force)...")
+ 
+             val currentSongs = _allSongs.value
+             val stats = _songStatistics.value
+             
+             if (currentSongs.isEmpty()) {
+                 Log.d("AudioViewModel", "Cannot refresh recommendations: No songs loaded.")
+                 return@launch
+             }
+ 
+             val result = recommendationEngine.generateDailyRecommendations(currentSongs, stats, currentDevice = null)
+             
+             if (result.songs.isNotEmpty()) {
+                 val nextTime = now + interval
+                 
+                 // Update State
+                 val newState = currentState.copy(
+                     lastRefreshTime = now,
+                     nextRefreshTime = nextTime,
+                     recommendedSongIds = result.songs.map { it.id },
+                     recommendationReasons = result.reasons
+                 )
+                 
+                 _recommendationState.value = newState
+                 // Mark these songs as recommended in stats (for cooldown)
+                 updateRecommendationStats(result.songs, now)
+                 playlistRepository.saveRecommendationState(newState)
+                 
+                 Log.d("AudioViewModel", "Daily Recommendations Refreshed: ${result.songs.size} songs. Next auto-refresh: ${java.util.Date(nextTime)}")
+                 
+                 // Schedule next
+                 scheduleNextAutoRefresh(nextTime)
+             } else {
+                 Log.w("AudioViewModel", "Daily Recommendations Generation Failed (Empty Result).")
+                 // Retry logic or just keep old schedule?
+                 // If we failed, maybe we should try again later or keep the old "nextRefreshTime"
+                 // For now, let's just ensure the scheduler is running for the existing next time
+                 if (currentState.nextRefreshTime > now) {
+                     scheduleNextAutoRefresh(currentState.nextRefreshTime)
+                 }
+             }
+         }
     }
     
     // [NEW] Foreground Scheduler
@@ -996,6 +1009,26 @@ class AudioViewModel(
         }
         
         currentSessionSongId = null
+    }
+    
+    // [NEW] Update stats when songs are recommended (for Cooldown)
+    private fun updateRecommendationStats(songs: List<Song>, time: Long) {
+        viewModelScope.launch {
+            val currentMap = _songStatistics.value.toMutableMap()
+            var changed = false
+            
+            songs.forEach { song ->
+                val stats = currentMap[song.id] ?: com.vagueplayer.music.data.model.SongStatistics(song.id)
+                currentMap[song.id] = stats.copy(lastRecommendedAt = time)
+                changed = true
+            }
+            
+            if (changed) {
+                _songStatistics.value = currentMap
+                playlistRepository.saveSongStatistics(currentMap) 
+                Log.d("AudioViewModel", "Updated recommendation stats for ${songs.size} songs.")
+            }
+        }
     }
 
     fun deleteSongs(songs: List<Song>) {
@@ -1696,7 +1729,13 @@ class AudioViewModel(
         super.onCleared()
         savePlaybackState()
         controllerFuture?.let {
-            MediaController.releaseFuture(it)
+            try {
+                MediaController.releaseFuture(it)
+            } catch (e: Exception) {
+                // Ignore "Service not registered" or other release errors.
+                // If it wasn't registered, our job (releasing) is effectively done or irrelevant.
+                Log.w("AudioViewModel", "Error releasing MediaController future: ${e.message}")
+            }
         }
         mediaController = null
     }
