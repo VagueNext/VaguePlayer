@@ -142,9 +142,9 @@ fun ScreenHeader(
                     .hazeChild(
                         state = hazeState,
                         style = HazeStyle(
-                            backgroundColor = Color.White.copy(alpha = 0.35f),
-                            tint = dev.chrisbanes.haze.HazeTint(Color.White.copy(alpha = 0.3f)), 
-                            blurRadius = 40.dp,
+                            backgroundColor = Color.White.copy(alpha = 0.65f), // [FIX] Increased opacity to hide underlying text at edges
+                            tint = dev.chrisbanes.haze.HazeTint(Color.White.copy(alpha = 0.4f)), 
+                            blurRadius = 25.dp, // [FIX] Reduced radius to minimize edge bleeding/fading artifacts
                             noiseFactor = 0f
                         )
                     )
