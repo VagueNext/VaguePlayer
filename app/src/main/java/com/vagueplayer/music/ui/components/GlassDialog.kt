@@ -46,7 +46,7 @@ fun GlassDialog(
 
     Box(
         modifier = Modifier
-            .zIndex(200f) // Top Layer
+            .zIndex(2500f) // Top Layer (Boosted to override Playlists Overlay)
             .fillMaxSize()
             // No Scrim (Darkening) as requested, relying on Glass Effect
             .clickable(

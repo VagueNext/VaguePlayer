@@ -56,6 +56,7 @@ fun SharedTransitionScope.ExpandableContainer(
     scrimColor: Color = Color.Black.copy(alpha = 0.3f),
     cornerRadius: Dp = 28.dp, // Default "Big" corner radius
     renderInOverlay: Boolean = true, // Control parameter
+    resizeMode: SharedTransitionScope.ResizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds, // [FIX] Configurable Resize Mode
     content: @Composable AnimatedVisibilityScope.() -> Unit
 ) {
     // 1. Scrim (Removed as per user request)
@@ -63,7 +64,7 @@ fun SharedTransitionScope.ExpandableContainer(
     // 2. Expanded Card (Target)
     AnimatedVisibility(
         visible = isExpanded,
-        enter = EnterTransition.None, 
+        enter = fadeIn(animationSpec = tween(200)), // [FIX] Mask layout glitch with smooth fade-in 
         exit = ExitTransition.None,
         modifier = Modifier
             .fillMaxSize()
@@ -99,30 +100,24 @@ fun SharedTransitionScope.ExpandableContainer(
                     sharedContentState = sharedState,
                     animatedVisibilityScope = currentScope,
                     boundsTransform = { _, _ -> AnimationUtils.sharedElementSpring },
-                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                    renderInOverlayDuringTransition = renderInOverlay 
+                    resizeMode = resizeMode,
+                    placeHolderSize = SharedTransitionScope.PlaceHolderSize.animatedSize, // [FIX] Match Source
+                    renderInOverlayDuringTransition = renderInOverlay  
                 )
             }
 
 
             
             // Container Content (The Card)
+            // [FIX] Modifier Order: sharedBounds FIRST, then layout modifiers
             Box(
                 modifier = androidx.compose.ui.Modifier
-                    .align(Alignment.Center)
-                    .fillMaxWidth() 
-                    .fillMaxHeight() 
-                    .then(sharedElementModifier)
-                    .background(containerColor, androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius)) 
-                    .graphicsLayer {
-                        this.clip = true
-                        this.shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius) // Simplify radius
-                    }
-                    // Draggable removed to prevent conflicts with PlayerScreen's own gesture handling
+                    .then(sharedElementModifier) 
+                    .fillMaxSize() // Fill the ANIMATED bounds
+                    .background(containerColor) // Background fills animated bounds
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius))
             ) {
-                 content()
-                 
-                 // Close Button?
+                 content(currentScope) // Pass scope to content
             }
         }
     }
@@ -130,10 +125,6 @@ fun SharedTransitionScope.ExpandableContainer(
 
 /**
  * Modifier extension to easily tag a Composable as the "Source" of a Container Transform.
- *
- * @param key The unique key matching the Target.
- * @param sharedTransitionScope The global SharedTransitionScope.
- * @param animatedVisibilityScope The local AnimatedVisibilityScope (e.g. from AnimatedContent or AnimatedVisibility).
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -141,13 +132,14 @@ fun Modifier.transformSource(
     key: String,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    renderInOverlay: Boolean = false // Default to FALSE to prevent LazyGrid crashes globally
+    renderInOverlay: Boolean = true // [FIX] Default to TRUE to match Target
 ): Modifier = with(sharedTransitionScope) {
     this@transformSource.sharedBounds(
-        sharedContentState = rememberSharedContentState(key = key),
+        rememberSharedContentState(key = key),
         animatedVisibilityScope = animatedVisibilityScope,
         boundsTransform = { _, _ -> AnimationUtils.sharedElementSpring },
         resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+        placeHolderSize = SharedTransitionScope.PlaceHolderSize.animatedSize, // [FIX] Match Target
         renderInOverlayDuringTransition = renderInOverlay
     )
 }

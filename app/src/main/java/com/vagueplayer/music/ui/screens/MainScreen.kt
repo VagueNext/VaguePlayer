@@ -18,6 +18,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
+import com.vagueplayer.music.ui.theme.AnimationUtils
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.zIndex
 
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.heightIn
@@ -106,12 +110,9 @@ import com.vagueplayer.music.ui.components.NavItems
 import com.vagueplayer.music.ui.components.MiniPlayer
 import com.vagueplayer.music.ui.components.SwipeablePager
 
-import androidx.compose.ui.zIndex
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 
@@ -214,6 +215,17 @@ fun MainScreen() {
     var showPlaylistGlobal by remember { mutableStateOf(false) }
     var selectedPlaylist by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
     
+    // [FIX] Delayed reset logic for overlayBounds to ensure smooth finish of glass transitions
+    var targetOverlayBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    LaunchedEffect(targetOverlayBounds) {
+        if (targetOverlayBounds == null) {
+            kotlinx.coroutines.delay(600) // Wait for Shared Transition Exit
+            overlayBounds = null
+        } else {
+            overlayBounds = targetOverlayBounds
+        }
+    }
+    
     // [NEW] Reactive Update: If Daily Recommendations change while viewing them, update the view
     LaunchedEffect(dailyRecommendations) {
         if (selectedPlaylist?.id == "daily_recommend") {
@@ -256,10 +268,7 @@ fun MainScreen() {
     var showSelectionMenu by remember { mutableStateOf(false) }
     var playlistMenuAnchor by remember { mutableStateOf(Offset.Zero) }
 
-    // Playlist Context Menu (Long Click)
-    var showPlaylistContextMenu by remember { mutableStateOf(false) }
-    var activePlaylistForContextMenu by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
-    var playlistContextMenuAnchor by remember { mutableStateOf(Offset.Zero) }
+
     var showRepeatMenu by remember { mutableStateOf(false) }
     var repeatMenuAnchor by remember { mutableStateOf(Offset.Zero) }
     // Loop Count Dialog State
@@ -446,6 +455,7 @@ fun MainScreen() {
             Box(
                  modifier = Modifier
                     .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background) // [FIX] Ensure opaque background for predictive back
                     // .haze(state = mainHazeState) // REMOVED: Pushed down to children to avoid Sink-in-Source crash
             ) {
             // Background (Pure White)\n            Box(modifier = Modifier.fillMaxSize().background(Color.White))
@@ -613,17 +623,12 @@ fun MainScreen() {
                                                     onPlaylistClick = { playlist -> 
                                                         selectedPlaylist = playlist 
                                                     },
-                                                    onContextMenuRequest = { playlist, offset ->
-                        // User Request: Direct Delete Dialog on Long Press (Skipping Menu)
-                        // activePlaylistForContextMenu = playlist
-                        // playlistContextMenuAnchor = offset
-                        // showPlaylistContextMenu = true
-                        
-                        // Direct Delete
-                        audioViewModel.requestDeletePlaylist(playlist)
-                    },
+                                                    onContextMenuRequest = { playlist, _ ->
+                                                        // [FIX] Directly trigger delete dialog, skipping the menu
+                                                        audioViewModel.requestDeletePlaylist(playlist)
+                                                    },
                                                     hazeState = mainHazeState,
-                                                    animatedVisibilityScope = avScope,
+                                                    animatedVisibilityScope = avScope, 
                                                     onSongMenuRequest = { song, offset, size ->
                                                         activeSongForMenu = song
                                                         songMenuAnchor = offset
@@ -632,8 +637,8 @@ fun MainScreen() {
                                                     }
                                                 )
                                             }
-                                        }
-                                    }
+                                         }
+                                     }
                                 2 -> ProfileScreen(
                                     // hazeState = null, (Removed)
                                     onNavigateToSettings = { showSettings = true },
@@ -905,33 +910,73 @@ fun MainScreen() {
 
         // Playlist Detail Container Transform
         // Replaces old AnimatedContent to allow Shared Element Scope to pass through
+        // Playlist Detail Container Transform
+        // Replaces old AnimatedContent to allow Shared Element Scope to pass through
+        // [FIX] Use ExpandableContainer for consistent physics with Player
         val currentPlaylist = selectedPlaylist
-        androidx.compose.animation.AnimatedVisibility(
+        // Persist content for exit transition
+        var activePlaylistContent by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
+        if (currentPlaylist != null) {
+            activePlaylistContent = currentPlaylist
+        }
+
+        val sharedKey = remember(activePlaylistContent?.id) {
+            val id = activePlaylistContent?.id
+            if (id == "daily_recommend") "playlist_card_daily_recommend" 
+            else if (id != null) "playlist_card_$id"
+            else ""
+        }
+
+        // [FIX] Direct Playlist Transition (Hardcoded for Stability)
+        // Replaces generic ExpandableContainer to guarantee "Card -> Full Screen" physics.
+        AnimatedVisibility(
             visible = currentPlaylist != null,
-            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)),
-            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300)),
-            modifier = Modifier.zIndex(100f).fillMaxSize()
-        ) { 
-            if (currentPlaylist != null) {
-                // Determine cover URL
-                val coverUrl = audioViewModel.getMostPlayedSong(currentPlaylist)?.albumArtUri?.toString() 
-                    ?: currentPlaylist.songs.firstOrNull()?.albumArtUri?.toString()
-                
-                PlaylistDetailScreen(
-                    playlist = currentPlaylist,
-                    viewModel = audioViewModel,
-                    onDismissRequest = { selectedPlaylist = null },
-                    animatedVisibilityScope = this, // Now refers to AnimatedVisibilityScope from AnimatedVisibility
-                    hazeState = mainHazeState,
-                    playerBounds = playerBounds ?: androidx.compose.ui.geometry.Rect.Zero, // Pass glass bounds
-                    onSongMenuRequest = { song, offset, size ->
-                        activeSongForMenu = song
-                        songMenuAnchor = offset
-                        size?.let { songMenuSize = it } ?: run { songMenuSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp) }
-                        showSongMenu = true
-                    }
-                )
-            }
+            // [FIX] Disable Container Shared Transition as requested (Standard Fade/Slide)
+            enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(initialOffsetY = { it / 10 }), 
+            exit = fadeOut(tween(durationMillis = 300)) + slideOutVertically(targetOffsetY = { it / 10 }),
+            modifier = Modifier.zIndex(200f) // Always on top
+        ) {
+             // The Shared Element Container
+             Box(
+                 modifier = Modifier
+                     .fillMaxSize() // Wrapper fills screen to host the overlay
+             ) {
+                 // The Surface that Morphs
+                 // CRITICAL: sharedBounds -> fillMaxSize -> background
+                 Box(
+                     modifier = Modifier
+                         .then(
+                            Modifier
+                        )
+                         .fillMaxSize() // Fill the ANIMATED bounds (Card -> Screen)
+                         .clip(RoundedCornerShape(0.dp)) // No corners on Target
+                         .background(MaterialTheme.colorScheme.background) 
+                 ) {
+                      if (activePlaylistContent != null) {
+                           // Log lifecycle
+                            androidx.compose.runtime.SideEffect {
+                                 android.util.Log.d("MainScreen", "Direct Transition: Key=$sharedKey, Playlist=${activePlaylistContent?.name}")
+                            }
+                           
+                           PlaylistDetailScreen(
+                               playlist = activePlaylistContent!!,
+                               viewModel = audioViewModel,
+                               onDismissRequest = { selectedPlaylist = null },
+                               animatedVisibilityScope = this@AnimatedVisibility, 
+                               sharedTransitionScope = this@SharedTransitionLayout,
+                               hazeState = mainHazeState,
+                               playerBounds = playerBounds ?: androidx.compose.ui.geometry.Rect.Zero,
+                               isBackEnabled = !showPlayer,
+                               onSongMenuRequest = { song, offset, size ->
+                                   activeSongForMenu = song
+                                   songMenuAnchor = offset
+                                   size?.let { songMenuSize = it } ?: run { songMenuSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp) }
+                                   showSongMenu = true
+                               }
+                           )
+                      }
+                 }
+             }
         }
 
 
@@ -947,9 +992,9 @@ fun MainScreen() {
                 showRepeatMenu = false
                 showSortMenu = false
                 showPlaylistMenu = false
-                overlayBounds = null
+                targetOverlayBounds = null
             },
-            modifier = Modifier.fillMaxSize(), 
+            modifier = Modifier.fillMaxSize().zIndex(200f), 
         ) {
             PlayerScreen(
                 sharedTransitionScope = this@SharedTransitionLayout,
@@ -965,16 +1010,15 @@ fun MainScreen() {
             )
         }
 
-        // Hoisted Sort Menu Overlay
         com.vagueplayer.music.ui.components.MorphingGlassMenu(
             isExpanded = showSortMenu,
-                onDismiss = { 
-                    showSortMenu = false
-                    overlayBounds = null
-                },
+            onDismiss = { 
+                showSortMenu = false
+                targetOverlayBounds = null
+            },
                 anchorSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp),
                 anchorPosition = sortMenuAnchor, 
-                onLayoutCoordinates = { overlayBounds = it.boundsInRoot() }
+                onLayoutCoordinates = { targetOverlayBounds = it.boundsInRoot() }
             ) {
                   val currentSort = audioViewModel.sortOption.collectAsState().value
                   val options: List<Pair<String, com.vagueplayer.music.viewmodel.AudioViewModel.SortOption>> = listOf(
@@ -987,22 +1031,22 @@ fun MainScreen() {
                       "添加时间" to com.vagueplayer.music.viewmodel.AudioViewModel.SortOption.DATE_ADDED
                   )
                   
-                  options.forEach { (label, option) ->
+                  for ((label, option) in options) {
                       Row(
                            modifier = Modifier
                                .fillMaxWidth()
                                .clickable { 
                                    audioViewModel.setSortOption(option)
                                    showSortMenu = false
-                                   overlayBounds = null
+                                   targetOverlayBounds = null
                                }
                                .padding(vertical = 8.dp, horizontal = 20.dp), 
                            horizontalArrangement = Arrangement.SpaceBetween,
                            verticalAlignment = Alignment.CenterVertically
                       ) {
                           Text(
-                              text = label, 
-                              color = if(currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Black, 
+                               text = label, 
+                               color = if(currentSort == option) com.vagueplayer.music.ui.theme.AccentBlue else Color.Black, 
                               fontSize = 15.sp, 
                               fontWeight = FontWeight.Medium
                           )
@@ -1259,36 +1303,7 @@ fun MainScreen() {
 
 
 
-        // Playlist Context Menu (Detailed actions like Delete)
-        com.vagueplayer.music.ui.components.PlaylistContextMenu(
-            isExpanded = showPlaylistContextMenu,
-            playlist = activePlaylistForContextMenu,
-            anchorSize = androidx.compose.ui.unit.DpSize(0.dp, 0.dp), // Check exact size if needed, but 0 is safe for point anchor
-            anchorPosition = playlistContextMenuAnchor,
-            hazeState = mainHazeState,
-            onLayoutCoordinates = { overlayBounds = it.boundsInRoot() },
-            onRename = { playlist ->
-                // Typically rename is inside Detail Screen, but we can do it here if needed.
-                // For now, let's just open the detail screen in "Rename Mode" or ignored?
-                // Or implementing a global rename dialog.
-                // Given time constraints, maybe just enter the playlist? 
-                // Actually the user wants "Delete".
-                
-                // Let's implement full Rename Dialog if we have time, or just ignore for now?
-                // The Detail Screen has logic.
-                selectedPlaylist = playlist
-                showPlaylistContextMenu = false
-            },
-            onExport = { playlist ->
-                // Export Logic
-                showPlaylistContextMenu = false
-            },
-            onDelete = { playlist ->
-                audioViewModel.requestDeletePlaylist(playlist)
-                showPlaylistContextMenu = false
-            },
-            onDismiss = { showPlaylistContextMenu = false }
-        )
+
 
         // Song Action Menu
         com.vagueplayer.music.ui.components.SongActionMenu(
@@ -1563,33 +1578,32 @@ fun MainScreen() {
     BackHandler(enabled = showRecentOverlay) { showRecentOverlay = false }
     BackHandler(enabled = showFavoritesOverlay) { showFavoritesOverlay = false }
 
-    // 5. Dialogs
     BackHandler(enabled = showDeleteConfirm) { 
         showDeleteConfirm = false
-        overlayBounds = null
+        targetOverlayBounds = null
     }
     BackHandler(enabled = showCreatePlaylistDialog) { 
         showCreatePlaylistDialog = false
-        overlayBounds = null
+        targetOverlayBounds = null
     }
     BackHandler(enabled = showAddToPlaylist) { showAddToPlaylist = false }
 
     // 6. Menus (High Priority)
     BackHandler(enabled = showPlaylistMenu) { 
         showPlaylistMenu = false
-        overlayBounds = null
+        targetOverlayBounds = null
     }
     BackHandler(enabled = showRepeatMenu) { 
         showRepeatMenu = false
-        overlayBounds = null
+        targetOverlayBounds = null
     }
     BackHandler(enabled = showSortMenu) { 
         showSortMenu = false
-        overlayBounds = null
+        targetOverlayBounds = null
     }
     BackHandler(enabled = showSongMenu) { 
         showSongMenu = false
-        overlayBounds = null
+        targetOverlayBounds = null
     }
     
     // Playlist Global Overlay (Highest Priority for Overlay Stack)
@@ -1614,6 +1628,7 @@ fun MainScreen() {
     // Global Playlist Delete Dialog (Hoisted & Undistorted)
     val playlistToDelete by audioViewModel.playlistToDelete.collectAsState()
     if (playlistToDelete != null) {
+        android.util.Log.d("MainScreen", "Rendering Delete Dialog for: ${playlistToDelete?.name}")
         com.vagueplayer.music.ui.components.GlassAlertDialog(
             title = "删除歌单",
             description = "确定要删除歌单 '${playlistToDelete!!.name}' 吗？",
@@ -1623,15 +1638,15 @@ fun MainScreen() {
             hazeState = mainHazeState,
             onConfirm = {
                 audioViewModel.confirmDeletePlaylist()
-                overlayBounds = null
+                targetOverlayBounds = null
             },
             onDismiss = { 
                 audioViewModel.cancelDeletePlaylist()
-                overlayBounds = null
+                targetOverlayBounds = null
             },
             // [CRITICAL] Capture bounds for Global Distortion
             onLayoutCoordinates = { 
-                overlayBounds = it.boundsInRoot()
+                targetOverlayBounds = it.boundsInRoot()
             }
         )
     }

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 
+
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,23 +58,65 @@ import com.vagueplayer.music.ui.components.liquidGlassLens
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.AnimatedVisibilityScope
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun SharedTransitionScope.PlaylistDetailScreen(
+fun PlaylistDetailScreen(
     playlist: Playlist,
     viewModel: AudioViewModel,
     onDismissRequest: () -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope,
+    sharedTransitionScope: SharedTransitionScope, // Added
     hazeState: HazeState? = null,
     playerBounds: androidx.compose.ui.geometry.Rect = androidx.compose.ui.geometry.Rect.Zero, // For glass distortion
+    isBackEnabled: Boolean = true, // [FIX] Prevent back handling when obscured (e.g. Player)
     onSongMenuRequest: (com.vagueplayer.music.data.model.Song, androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
 ) {
     val effectiveHazeState = hazeState ?: remember { HazeState() }
 
-    // Predictive Back State
-    // Standard Back Handler to ensure reliable exit
-    androidx.activity.compose.BackHandler(onBack = onDismissRequest)
+    // [FIX] Predictive Back Handler with Progress
+    // Note: Since we are using sharedBounds, we rely on the framework to handle the gesture-driven animation 
+    // if supported by the navigation controller or parent AnimatedContent. 
+    // However, here we are in a Manual AnimatedVisibility in MainScreen. 
+    // To support Predictive Back gesture progress properly, we would need to drive the transition manually or use SeekableTransitionState.
+    // For now, staying with standard BackHandler but checking Shared Bounds execution.
+    //
+    // However, if the user complains "cannot see the layer below", it means the shared element isn't "shrinking" 
+    // or the background opacity isn't changing during the swipe.
+    // Standard system back just does "Back Arrow" -> "Commit".
+    
+    // Enabling Predictive Back gesture if Android 14+ usually requires 'PredictiveBackHandler'.
+    // Let's implement a basic one that scales the content.
+    
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    
+    val backCallback = remember {
+        object : androidx.activity.OnBackPressedCallback(isBackEnabled) {
+            override fun handleOnBackPressed() {
+                onDismissRequest()
+            }
+
+            override fun handleOnBackProgressed(backEvent: androidx.activity.BackEventCompat) {
+                backProgress = backEvent.progress
+            }
+
+            override fun handleOnBackCancelled() {
+                backProgress = 0f
+            }
+        }
+    }
+    
+    // Update callback state when parameter changes
+    backCallback.isEnabled = isBackEnabled
+    
+    val dispatcher = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    DisposableEffect(dispatcher) {
+        dispatcher?.addCallback(backCallback)
+        onDispose { backCallback.remove() }
+    }
 
     // State
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -138,34 +181,45 @@ fun SharedTransitionScope.PlaylistDetailScreen(
     }
 
 
+    androidx.compose.runtime.SideEffect {
+        android.util.Log.d("PlaylistDetailScreen", "Composed Detail Screen: ${playlist.name}")
+    }
     Surface(
         modifier = Modifier
-            .fillMaxSize(),
+            .fillMaxSize()
+            .graphicsLayer {
+                // Predictive Back Effect
+                val progress = backProgress
+                if (progress > 0f) {
+                    val scale = 1f - (progress * 0.1f)
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = progress * 50.dp.toPx()
+                    clip = true
+                    shape = RoundedCornerShape((32 * progress).coerceAtLeast(0f).dp)
+                } else {
+                    scaleX = 1f
+                    scaleY = 1f
+                    translationX = 0f
+                    clip = false
+                }
+            },
         color = Color.Transparent
     ) {
         // Glass Lens Wrapper for content distortion
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .liquidGlassLens(
-                    bounds1 = playerBounds,
-                    bounds2 = null,
-                    bounds3 = null,
-                    bounds4 = null,
-                    distortionStrength = 45f,
-                    edgeWidth = 60f,
-                    fusionStrength = 35f,
-                    aberrationStrength = 0.3f,
-                    tint = Color.White.copy(alpha = 0.80f),
-                    enableShader = true
-                )
         ) {
-        // Content Container
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { rootLayoutCoordinates = it }
-        ) {
+
+            // [FIX] Main Content Container with Shared Bounds
+            // Re-nested to ensure correct Z-ordering (Parent Background < Child Content)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Transparent) // [FIX] Explicit Transparent to allow MainScreen container to show
+                    .onGloballyPositioned { rootLayoutCoordinates = it }
+            ) {
             // Haze Source Container - Wraps Background and List
             // Separated from Overlay Elements (Header, Sidebar) to prevent Haze recursion
             Box(
@@ -175,12 +229,9 @@ fun SharedTransitionScope.PlaylistDetailScreen(
             ) {
                 // Shared Background Layer - Decoupled from Content
                     // Shared Background Layer - Decoupled from Content
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        // .sharedBounds(...) REMOVED to fix flicker/glitch
-                        .background(MaterialTheme.colorScheme.background)
-                )
+                // Shared Background Layer - Decoupled from Content
+                // Removed redundant/invalid Box
+
 
                 Box(
                     modifier = Modifier
@@ -199,10 +250,16 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(1f)
-                                    .sharedElement(
-                                        state = rememberSharedContentState(key = "cover_${playlist.id}"),
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) }
+                                    .then(
+                                        with(sharedTransitionScope) {
+                                            Modifier.sharedBounds(
+                                                rememberSharedContentState(key = "cover_${playlist.id}"),
+                                                animatedVisibilityScope = animatedVisibilityScope,
+                                                boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
+                                                resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds, // [FIX] Force resize to Target constraints (Full Width)
+                                                renderInOverlayDuringTransition = true
+                                            )
+                                        }
                                     )
                             ) {
                                 // Background Blur Image
@@ -306,6 +363,9 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                 }
             }
 
+
+            } // Close SharedBounds Box here
+
             // Alphabet Sidebar
             val isSidebarLeft by viewModel.isSidebarOnLeft.collectAsState()
             val sidebarSections = remember { (listOf('#') + ('A'..'Z')).toList() }
@@ -346,10 +406,6 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                     modifier = Modifier
                         .align(if (isSidebarLeft) Alignment.CenterStart else Alignment.CenterEnd)
                         .zIndex(2f) // Float above liquidGlassLens to receive touch events
-                        .padding(
-                            start = if (isSidebarLeft) 8.dp else 0.dp,
-                            end = if (isSidebarLeft) 0.dp else 8.dp
-                        )
                 )
             }
 
@@ -373,24 +429,27 @@ fun SharedTransitionScope.PlaylistDetailScreen(
                     )
                 },
                 action = {
-                    GlassIconButton(
-                        onClick = { showRealSortMenu = true },
-                        icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
-                        contentDescription = "Sort",
-                        tint = if (scrollAlpha > 0.5f) Color.Black else sortIconTint,
-                        glassTint = Color.White.copy(alpha = 0.2f),
-                        modifier = Modifier
-                            .onGloballyPositioned { coordinates ->
-                                val bounds = calculateBounds(coordinates, rootLayoutCoordinates)
-                                sortButtonBounds = bounds
-                                sortMenuAnchor = bounds.topLeft
-                            }
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        GlassIconButton(
+                            onClick = { showRealSortMenu = true },
+                            icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
+                            contentDescription = "Sort",
+                            tint = if (scrollAlpha > 0.5f) Color.Black else sortIconTint,
+                            glassTint = Color.White.copy(alpha = 0.2f),
+                            modifier = Modifier
+                                .onGloballyPositioned { coordinates ->
+                                    val bounds = calculateBounds(coordinates, rootLayoutCoordinates)
+                                    sortMenuAnchor = bounds.topLeft
+                                }
+                        )
+                    }
                 },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
             )
-        }
+
+        // Playlist Action Menu (Rename, Delete, etc.)
+
 
         // Sort Menu
         com.vagueplayer.music.ui.components.MorphingGlassMenu(

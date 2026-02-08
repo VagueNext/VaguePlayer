@@ -46,64 +46,136 @@ class RecommendationEngine {
         val reasons: Map<Long, String>
     )
 
+    // Helper for internal scoring
+    private data class ScoredSong(
+        val song: Song, 
+        val score: Float, 
+        val debugReason: String
+    )
+
     fun generateDailyRecommendations(
         allSongs: List<Song>,
         statsMap: Map<Long, SongStatistics>,
-        currentDevice: String? = null 
+        currentDevice: String = "UNKNOWN" 
     ): RecommendationResult {
-        // [NEW] Min Songs Requirement
-        if (allSongs.size < 100) {
-            return RecommendationResult(emptyList(), emptyMap())
-        }
-
-        if (allSongs.isEmpty()) {
+        // [Verified] Min Songs Requirement
+        if (allSongs.size < 20) {
             return RecommendationResult(emptyList(), emptyMap())
         }
 
         val now = System.currentTimeMillis()
+        val calendar = java.util.Calendar.getInstance().apply { timeInMillis = now }
+        val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        
+        // Context Detection
+        val currentTimeKey = when (hour) {
+            in 6..10 -> "MORNING"
+            in 11..13 -> "NOON"
+            in 14..18 -> "AFTERNOON"
+            in 19..23 -> "EVENING"
+            else -> "LATE_NIGHT"
+        }
         
         // 1. Calculate Target Count
         val targetCount = (allSongs.size * RATIO).toInt()
             .coerceIn(MIN_RECOMMENDATION_COUNT, MAX_RECOMMENDATION_COUNT)
             .coerceAtMost(allSongs.size)
             
-        // 2. Filter Cooldown (2 Days)
-        val availableSongs = allSongs.filter { song ->
+        // 2. Filter Cooldown + Scoring Preparation
+        data class ScoredSong(val song: Song, val score: Float, val debugReason: String)
+        
+        val candidates = allSongs.mapNotNull { song ->
             val stats = statsMap[song.id] ?: SongStatistics(song.id)
+            
+            // Cooldown Filter
             val timeSinceRecommended = now - stats.lastRecommendedAt
-            timeSinceRecommended > RECOMMENDATION_COOLDOWN_MS || stats.lastRecommendedAt == 0L
+            if (stats.lastRecommendedAt != 0L && timeSinceRecommended < RECOMMENDATION_COOLDOWN_MS) {
+                return@mapNotNull null
+            }
+            
+            // Scoring Logic
+            var score = 1.0f
+            var reasons = mutableListOf<String>()
+            
+            // A. Recency / Freshness (Higher for recent, penalized for very old if not retro)
+            // (Simulated logic: newer songs get slight boost)
+            
+            // B. Context Match (Time of Day)
+            val timePlayCount = stats.timeOfDayStats?.get(currentTimeKey) ?: 0
+            if (timePlayCount > 2) {
+                score += 2.0f
+                reasons.add("时段(${currentTimeKey})")
+            }
+            
+            // C. Device Match
+            if (currentDevice != "UNKNOWN" && stats.lastDevice == currentDevice) {
+                score += 1.5f
+                reasons.add("设备偏好")
+            }
+            
+            // D. Engagement
+            val totalPlays = stats.playCount + stats.skipCount
+            if (totalPlays > 5) {
+                val completionRate = stats.completionCount.toFloat() / totalPlays
+                if (completionRate > 0.8f) {
+                    score += 1.0f
+                    reasons.add("高完播")
+                } else if (completionRate < 0.2f) {
+                    score -= 2.0f // Penalize frequent skips
+                }
+            }
+            
+            // [NEW] E. Recommendation Feedback (Explicit Feedback)
+            val totalRecPlays = stats.recommendationPlayCount + stats.recommendationSkipCount
+            if (totalRecPlays > 0) {
+                val recCompletionRate = stats.recommendationCompleteCount.toFloat() / totalRecPlays
+                if (recCompletionRate > 0.8f) {
+                    score += 1.5f // Stronger bonus for verifying recommendation was good
+                    reasons.add("推荐反馈好")
+                } else if (recCompletionRate < 0.3f) {
+                   score -= 3.0f // Strong penalty if user consistently skips this when recommended
+                   reasons.add("推荐常跳过")
+                }
+            }
+            
+            // F. Play Count (Base Popularity)
+            if (stats.playCount > 10) score += 1.0f
+            
+            ScoredSong(song, score, reasons.joinToString(","))
         }
 
-        if (availableSongs.isEmpty()) return RecommendationResult(emptyList(), emptyMap())
+        if (candidates.isEmpty()) return RecommendationResult(emptyList(), emptyMap())
 
-        // 3. Categorize into Pools
-        val hotCandidates = mutableListOf<Song>()
-        val retroCandidates = mutableListOf<Song>()
-        val nicheCandidates = mutableListOf<Song>()
-        val remainderCandidates = mutableListOf<Song>() 
+        // 3. Categorize into Pools (using Scores now!)
+        val hotCandidates = mutableListOf<ScoredSong>()
+        val retroCandidates = mutableListOf<ScoredSong>()
+        val nicheCandidates = mutableListOf<ScoredSong>()
+        val remainderCandidates = mutableListOf<ScoredSong>() 
         
         val hotArtists = mutableSetOf<String>()
         
-        availableSongs.forEach { song ->
+        candidates.forEach { item ->
+            val song = item.song
             val stats = statsMap[song.id] ?: SongStatistics(song.id)
             
             if (stats.playCount >= HOT_SONG_MIN_PLAYS) {
-                hotCandidates.add(song)
+                // Hot Pool now prioritizes High Scores
+                hotCandidates.add(item)
                 hotArtists.add(song.artist)
             } else if (stats.playCount > 0 && (now - stats.lastPlayedAt) > RETRO_THRESHOLD_MS) {
-                retroCandidates.add(song)
+                retroCandidates.add(item)
             } else if (stats.playCount <= NICHE_SONG_MAX_PLAYS) {
-                nicheCandidates.add(song)
+                nicheCandidates.add(item)
             } else {
-                remainderCandidates.add(song)
+                remainderCandidates.add(item)
             }
         }
         
         val relatedCandidates = (retroCandidates + nicheCandidates + remainderCandidates).filter { 
-            hotArtists.contains(it.artist) 
+            hotArtists.contains(it.song.artist) 
         }.toMutableList()
         
-        // 4. Calculate Quotas
+        // 4. Calculate Quotas (Same as before)
         var quotaHot = (targetCount * RATIO_HOT).toInt()
         var quotaRelated = (targetCount * RATIO_RELATED).toInt()
         var quotaRetro = (targetCount * RATIO_RETRO).toInt()
@@ -113,68 +185,67 @@ class RecommendationEngine {
         val diff = targetCount - totalAllocated
         if (diff > 0) quotaHot += diff 
         
-        // 5. Fill Pools & Handle Overflow
+        // 5. Fill Pools with WEIGHTED SELECTION
         val finalSelection = mutableListOf<Song>()
         val reasons = HashMap<Long, String>()
         val selectedIds = mutableSetOf<Long>()
-        val selectedContentKeys = mutableSetOf<String>() // [NEW] For Title+Artist deduplication
-        val artistCounts = HashMap<String, Int>() // [NEW] Track artist frequency
+        val selectedContentKeys = mutableSetOf<String>() 
+        val artistCounts = HashMap<String, Int>() 
         
-        fun selectForPool(candidates: List<Song>, quota: Int, reason: String, poolName: String): Int {
+        fun selectForPool(poolItems: List<ScoredSong>, quota: Int, reasonPrefix: String): Int {
             if (quota <= 0) return 0
             
-            val validCandidates = candidates.filter { !selectedIds.contains(it.id) }.shuffled()
+            // Sort by Score Descending -> Then Shuffle top chunk to keep variety?
+            // Or Weighted Random selection? 
+            // Let's use Deterministic Sort by Score + Random Noise for variety
+            val sortedItems = poolItems.sortedByDescending { it.score + Math.random().toFloat() * 1.5f } // Add jitter
+            
             var addedCount = 0
             
-            for (song in validCandidates) {
+            for (item in sortedItems) {
+                val song = item.song
                 if (addedCount >= quota) break
                 
-                // [NEW] Check Artist Diversity
+                // Diversity Checks
                 val currentArtistCount = artistCounts.getOrDefault(song.artist, 0)
                 if (currentArtistCount >= MAX_SONGS_PER_ARTIST) continue
 
-                // [NEW] Check Title/Artist Duplicates (Content Deduplication)
-                // Use a composite key to ensure we don't add the same song (different file) twice
                 val contentKey = "${song.title.trim()}|${song.artist.trim()}"
                 if (selectedContentKeys.contains(contentKey)) continue
+                if (selectedIds.contains(song.id)) continue
                 
                 finalSelection.add(song)
                 selectedIds.add(song.id)
                 selectedContentKeys.add(contentKey)
-                reasons[song.id] = reason
+                
+                // Construct Reason
+                val specificReason = if (item.debugReason.isNotEmpty()) " - ${item.debugReason}" else ""
+                reasons[song.id] = "$reasonPrefix$specificReason"
+                
                 artistCounts[song.artist] = currentArtistCount + 1
                 addedCount++
             }
-            return quota - addedCount // Returning deficit
+            return quota - addedCount 
         }
         
-        // Logic: Try to fill quota. If not enough, pass deficit to next pool priority.
-        // Priority: Hot -> Related -> Niche -> Retro -> Hot (Loop back)
+        // -- Filling Phases
+        var deficitHot = selectForPool(hotCandidates, quotaHot, "常听热歌")
         
-        // -- Phase 1: Fill Hot (Priority 1)
-        var deficitHot = selectForPool(hotCandidates, quotaHot, "常听热歌", "HOT")
+        var deficitRelated = selectForPool(relatedCandidates, quotaRelated + deficitHot, "歌手关联")
         
-        // -- Phase 2: Fill Related (Priority 2) + Deficit from Hot
-        var deficitRelated = selectForPool(relatedCandidates, quotaRelated + deficitHot, "歌手关联", "RELATED")
+        var deficitRetro = selectForPool(retroCandidates, quotaRetro + deficitRelated, "许久未听")
         
-        // -- Phase 3: Fill Retro (Priority 3) + Deficit from Related
-        // Note: Retro candidates might have been taken by Related if we allowed overlap. 
-        // Since we check `selectedIds`, it's safe.
-        var deficitRetro = selectForPool(retroCandidates, quotaRetro + deficitRelated, "许久未听", "RETRO")
+        var deficitNiche = selectForPool(nicheCandidates, quotaNiche + deficitRetro, "冷门佳作")
         
-        // -- Phase 4: Fill Niche (Priority 4) + Deficit from Retro
-        var deficitNiche = selectForPool(nicheCandidates, quotaNiche + deficitRetro, "冷门佳作", "NICHE")
-        
-        // -- Phase 5: Final Sweep (If logic was super strict or candidates sparse)
-        // If we still have deficit (deficitNiche > 0), try to fill from ANY remaining available song
+        // Final Sweep
         if (deficitNiche > 0) {
-            val allRemaining = availableSongs.filter { !selectedIds.contains(it.id) }.shuffled()
-            selectForPool(allRemaining, deficitNiche, "猜你喜欢", "FILL")
+            val allRemaining = candidates.filter { !selectedIds.contains(it.song.id) }
+            selectForPool(allRemaining, deficitNiche, "猜你喜欢")
         }
 
-        // 6. Return Result
+        // Return Result
         return RecommendationResult(
-            songs = finalSelection.shuffled(),
+            songs = finalSelection.shuffled(), // Shuffle final list for display
             reasons = reasons
         )
     }

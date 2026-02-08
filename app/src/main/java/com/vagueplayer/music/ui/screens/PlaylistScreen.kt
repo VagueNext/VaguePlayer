@@ -38,15 +38,16 @@ import androidx.compose.ui.layout.boundsInWindow
  * Simplified PlaylistScreen - No SharedElement Animations
  * 干净简洁的歌单页面，专注于正确的显示和交互
  */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun PlaylistScreen(
+fun SharedTransitionScope.PlaylistScreen(
     onCreatePlaylist: () -> Unit,
     onShowAddMenu: (Offset) -> Unit,
     onOverlayBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
     hazeState: HazeState? = null,
     onPlaylistClick: (Playlist) -> Unit,
     onContextMenuRequest: (Playlist, Offset) -> Unit, // New callback
-    animatedVisibilityScope: Any? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null,
     onSongMenuRequest: (com.vagueplayer.music.data.model.Song, Offset, androidx.compose.ui.unit.DpSize?) -> Unit = { _, _, _ -> }
 ) {
     val effectiveHazeState = hazeState ?: remember { HazeState() }
@@ -103,21 +104,22 @@ fun PlaylistScreen(
                                  )
                              }
                              
-                             Card(
+                            // [FIX] Direct Card Usage (Unified with SimplePlaylistCard)
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
                                     .bouncyClickable(
-                                        targetScale = 0.95f, 
-                                        onClick = { onPlaylistClick(dailyPlaylist) },
-                                        onLongClick = { 
-                                             viewModel.refreshDailyRecommendations(force = true)
-                                             android.widget.Toast.makeText(context, "正在刷新每日推荐...", android.widget.Toast.LENGTH_SHORT).show()
-                                        }
-                                    ),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                            ) {
+                                            targetScale = 0.95f, 
+                                            onClick = { onPlaylistClick(dailyPlaylist) },
+                                            onLongClick = { 
+                                                 android.widget.Toast.makeText(context, "正在刷新每日推荐...", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        ),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
                                 Column(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
@@ -136,7 +138,24 @@ fun PlaylistScreen(
                                                 .build(),
                                             contentDescription = null,
                                             contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .then(
+                                                    if (animatedVisibilityScope != null) {
+                                                        Modifier.sharedBounds(
+                                                            rememberSharedContentState(key = "cover_daily_recommend"),
+                                                            animatedVisibilityScope = animatedVisibilityScope,
+                                                            boundsTransform = { _, _ -> 
+                                                                androidx.compose.animation.core.spring(
+                                                                    dampingRatio = 0.8f,
+                                                                    stiffness = 380f
+                                                                )
+                                                            },
+                                                            resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                                                            renderInOverlayDuringTransition = true
+                                                        )
+                                                    } else Modifier
+                                                )   
                                         )
                                         
                                         // Optional Overlay text per design? User said "Same as playlist card"
@@ -168,6 +187,8 @@ fun PlaylistScreen(
                     }
                 }
 
+
+
                 items(playlists) { playlist ->
                     // Track position for menu
                     var cardPosition by remember { mutableStateOf(Offset.Zero) }
@@ -176,7 +197,9 @@ fun PlaylistScreen(
                         SimplePlaylistCard(
                             playlist = playlist,
                             onClick = { onPlaylistClick(playlist) },
-                            onLongClick = { onContextMenuRequest(playlist, cardPosition) }
+                            onLongClick = { onContextMenuRequest(playlist, cardPosition) },
+                            sharedTransitionScope = this@PlaylistScreen,
+                            animatedVisibilityScope = animatedVisibilityScope
                         )
                     }
                 }
@@ -215,12 +238,14 @@ fun PlaylistScreen(
  * Simplified Playlist Card - No Animations
  * 简单的歌单卡片，确保封面完整显示
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun SimplePlaylistCard(
     playlist: Playlist,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     Card(
         modifier = Modifier
@@ -251,7 +276,26 @@ fun SimplePlaylistCard(
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                                with(sharedTransitionScope) {
+                                    Modifier.sharedBounds(
+                                        rememberSharedContentState(key = "cover_${playlist.id}"),
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        boundsTransform = { _, _ -> 
+                                            androidx.compose.animation.core.spring(
+                                                dampingRatio = 0.8f,
+                                                stiffness = 380f
+                                            )
+                                        },
+                                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                                        renderInOverlayDuringTransition = true
+                                    )
+                                }
+                            } else Modifier
+                        )
                 )
             }
 

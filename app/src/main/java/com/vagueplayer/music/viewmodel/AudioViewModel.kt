@@ -47,6 +47,8 @@ class AudioViewModel(
     private val playlistRepository: PlaylistRepository
 ) : ViewModel() {
 
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+
 
     // Playback Analytics (NEW)
     private val playbackAnalyzer = PlaybackAnalyzer(context, playlistRepository)
@@ -54,6 +56,7 @@ class AudioViewModel(
     // Playback session tracking
     private var currentSessionStart: Long = 0
     private var currentSessionSongId: Long? = null
+    private var currentRecommendationContext: Boolean = false // [NEW] Track if playing from recommendations
 
     // Sleep Timer Support
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
@@ -126,6 +129,7 @@ class AudioViewModel(
     val playlistToDelete: StateFlow<Playlist?> = _playlistToDelete.asStateFlow()
 
     fun requestDeletePlaylist(playlist: Playlist) {
+        Log.d("AudioViewModel", "Requesting delete for playlist: ${playlist.name}")
         _playlistToDelete.value = playlist
     }
 
@@ -851,18 +855,34 @@ class AudioViewModel(
         }
     }
     
-    private fun saveSongStatistics() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            playlistRepository.saveSongStatistics(_songStatistics.value)
+    // Helper to update statistics efficiently
+    private fun updateSongStat(songId: Long, update: (com.vagueplayer.music.data.model.SongStatistics) -> com.vagueplayer.music.data.model.SongStatistics) {
+        val currentMap = _songStatistics.value.toMutableMap()
+        val currentStats = currentMap[songId] ?: com.vagueplayer.music.data.model.SongStatistics(songId)
+        
+        var newStats = update(currentStats)
+        
+        // [NEW] Recommendation Specific Feedback
+        if (currentRecommendationContext) {
+            // Check what changed to apply same change to recommendation counters
+            if (newStats.playCount > currentStats.playCount) {
+                 newStats = newStats.copy(recommendationPlayCount = newStats.recommendationPlayCount + 1)
+            }
+            if (newStats.skipCount > currentStats.skipCount) {
+                 newStats = newStats.copy(recommendationSkipCount = newStats.recommendationSkipCount + 1)
+            }
+            if (newStats.completionCount > currentStats.completionCount) {
+                 newStats = newStats.copy(recommendationCompleteCount = newStats.recommendationCompleteCount + 1)
+            }
         }
-    }
-    
-    fun updateSongStat(songId: Long, updater: (com.vagueplayer.music.data.model.SongStatistics) -> com.vagueplayer.music.data.model.SongStatistics) {
-        val current = _songStatistics.value.toMutableMap()
-        val existing = current[songId] ?: com.vagueplayer.music.data.model.SongStatistics(songId = songId)
-        current[songId] = updater(existing)
-        _songStatistics.value = current
-        saveSongStatistics()
+        
+        currentMap[songId] = newStats
+        _songStatistics.value = currentMap
+        
+        // Persist (Async)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            playlistRepository.saveSongStatistics(currentMap)
+        }
     }
 
     // === Song Statistics for Recommendation Engine ===
@@ -922,7 +942,10 @@ class AudioViewModel(
                  return@launch
              }
  
-             val result = recommendationEngine.generateDailyRecommendations(currentSongs, stats, currentDevice = null)
+             // [NEW] Get Current Device for Context
+            val deviceKey = getCurrentAudioDeviceType()
+
+            val result = recommendationEngine.generateDailyRecommendations(currentSongs, stats, currentDevice = deviceKey)
              
              if (result.songs.isNotEmpty()) {
                  val nextTime = now + interval
@@ -999,16 +1022,103 @@ class AudioViewModel(
             when {
                 duration < 30_000 -> {
                     // Skip: Less than 30s
-                    updateSongStat(songId) { it.copy(skipCount = it.skipCount + 1) }
+                    // We incremented playCount at start (playSong), so decrement it if skipped quickly? 
+                    // Wait, current logic: playSong increments.
+                    // If we want "Valid Play", we should NOT increment at start, OR decrement here.
+                    // Previous logic (lines 1316) increments at start. 
+                    // So here we decrement if it was a skip.
+                    updateSongStat(songId) { it.copy(skipCount = it.skipCount + 1, playCount = (it.playCount - 1).coerceAtLeast(0)) }
+                    
+                    // Update recent skips
+                    updateSongStat(songId) { current ->
+                        val now = System.currentTimeMillis()
+                        val recent = (current.lastFiveDaysSkips ?: emptyList()).filter { t -> (now - t) < 5 * 24 * 3600 * 1000L } + now
+                        current.copy(lastFiveDaysSkips = recent)
+                    }
                 }
                 duration >= (songDuration * 0.9) -> {
                     // Completion: Played more than 90%
                     updateSongStat(songId) { it.copy(completionCount = it.completionCount + 1) }
+                    // Update Advanced Context Stats (Only for valid/engaged plays)
+                    updateAdvancedContextStats(songId)
+                }
+                else -> {
+                     // Cut (30s - 90%)
+                     updateSongStat(songId) { it.copy(cutCount = it.cutCount + 1) }
+                     // It's still a valid play (listened for >30s), so we keep playCount and update context
+                     updateAdvancedContextStats(songId)
                 }
             }
         }
         
         currentSessionSongId = null
+    }
+
+    // [NEW] Advanced Stats Collection Helper
+    private fun updateAdvancedContextStats(songId: Long) {
+        val now = System.currentTimeMillis()
+        val calendar = Calendar.getInstance().apply { timeInMillis = now }
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) // Sun=1, Mon=2...
+        
+        // 1. Time of Day
+        val timeKey = when (hour) {
+            in 6..10 -> "MORNING"
+            in 11..13 -> "NOON"
+            in 14..18 -> "AFTERNOON"
+            in 19..23 -> "EVENING"
+            else -> "LATE_NIGHT"
+        }
+        
+        // 2. Day of Week
+        val dayKey = if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) "WEEKEND" else "WEEKDAY"
+        
+        // 3. Device Type
+        val deviceKey = getCurrentAudioDeviceType()
+        
+        updateSongStat(songId) { current ->
+            // Update Time Map
+            val timeStats = (current.timeOfDayStats ?: emptyMap()).toMutableMap()
+            timeStats[timeKey] = (timeStats[timeKey] ?: 0) + 1
+            
+            // Update Day Map
+            val dayStats = (current.dayOfWeekStats ?: emptyMap()).toMutableMap()
+            dayStats[dayKey] = (dayStats[dayKey] ?: 0) + 1
+            
+            // Update Recent Plays
+            val recentPlays = (current.lastFiveDaysPlays ?: emptyList()).filter { t -> (now - t) < 5 * 24 * 3600 * 1000L } + now
+            
+            // Update History (Keep last 20)
+            val history = (current.playbackHistory ?: emptyList()) + now
+            val trimmedHistory = if (history.size > 20) history.takeLast(20) else history
+
+            current.copy(
+                timeOfDayStats = timeStats,
+                dayOfWeekStats = dayStats,
+                lastDevice = deviceKey,
+                lastFiveDaysPlays = recentPlays,
+                playbackHistory = trimmedHistory,
+                lastPlayedAt = now
+            )
+        }
+    }
+
+    private fun getCurrentAudioDeviceType(): String {
+        val devices = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+        for (device in devices) {
+            when (device.type) {
+                android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                android.media.AudioDeviceInfo.TYPE_BLE_HEADSET,
+                android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER,
+                android.media.AudioDeviceInfo.TYPE_BLE_BROADCAST -> return "BLUETOOTH"
+                
+                android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                android.media.AudioDeviceInfo.TYPE_USB_HEADSET -> return "HEADSET"
+            }
+        }
+        return "SPEAKER"
     }
     
     // [NEW] Update stats when songs are recommended (for Cooldown)
@@ -1325,6 +1435,9 @@ class AudioViewModel(
 
         // 1. Handle Playback Context (Auto History)
         val targetList = if (contextList.isNotEmpty()) contextList else listOf(song)
+        
+        // [NEW] Track Recommendation Context
+        currentRecommendationContext = (listName == "每日推荐" || listName == "Daily Recommend")
         
         if (contextList.isNotEmpty()) {
             // Create Context Playlist
