@@ -113,6 +113,7 @@ fun SharedTransitionScope.PlaylistScreen(
                                             targetScale = 0.95f, 
                                             onClick = { onPlaylistClick(dailyPlaylist) },
                                             onLongClick = { 
+                                                 viewModel.refreshDailyRecommendations(force = true)
                                                  android.widget.Toast.makeText(context, "正在刷新每日推荐...", android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         ),
@@ -130,32 +131,21 @@ fun SharedTransitionScope.PlaylistScreen(
                                             .aspectRatio(1f)
                                             .background(MaterialTheme.colorScheme.surfaceVariant)
                                     ) {
-                                        // Dynamic Cover from Rotating State
+                                        // [FIX] Restore Cover Image with Rotation (15 min)
+                                        val coverIndex by viewModel.dailyCoverIndex.collectAsState()
+                                        val coverSong = if (dailyPlaylist.songs.isNotEmpty()) {
+                                            dailyPlaylist.songs[coverIndex % dailyPlaylist.songs.size]
+                                        } else null
+                                        
                                         AsyncImage(
                                             model = ImageRequest.Builder(LocalContext.current)
-                                                .data(dailyCover?.albumArtUri) // [Use Rotating Cover]
+                                                .data(coverSong?.albumArtUri)
                                                 .crossfade(true)
+                                                .memoryCacheKey("daily_cover_${coverSong?.id ?: ""}")
                                                 .build(),
                                             contentDescription = null,
                                             contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .then(
-                                                    if (animatedVisibilityScope != null) {
-                                                        Modifier.sharedBounds(
-                                                            rememberSharedContentState(key = "cover_daily_recommend"),
-                                                            animatedVisibilityScope = animatedVisibilityScope,
-                                                            boundsTransform = { _, _ -> 
-                                                                androidx.compose.animation.core.spring(
-                                                                    dampingRatio = 0.8f,
-                                                                    stiffness = 380f
-                                                                )
-                                                            },
-                                                            resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                                                            renderInOverlayDuringTransition = true
-                                                        )
-                                                    } else Modifier
-                                                )   
+                                            modifier = Modifier.fillMaxSize()
                                         )
                                         
                                         // Optional Overlay text per design? User said "Same as playlist card"
@@ -273,29 +263,12 @@ fun SimplePlaylistCard(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(playlist.songs.firstOrNull()?.albumArtUri)
                         .crossfade(true)
+                        .memoryCacheKey("cover_${playlist.id}_${playlist.songs.firstOrNull()?.id ?: ""}")
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(
-                            if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                                with(sharedTransitionScope) {
-                                    Modifier.sharedBounds(
-                                        rememberSharedContentState(key = "cover_${playlist.id}"),
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        boundsTransform = { _, _ -> 
-                                            androidx.compose.animation.core.spring(
-                                                dampingRatio = 0.8f,
-                                                stiffness = 380f
-                                            )
-                                        },
-                                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                                        renderInOverlayDuringTransition = true
-                                    )
-                                }
-                            } else Modifier
-                        )
                 )
             }
 

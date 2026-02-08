@@ -187,6 +187,11 @@ fun PlaylistDetailScreen(
     Surface(
         modifier = Modifier
             .fillMaxSize()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { /* Consume touch to prevent fall-through */ }
+            )
             .graphicsLayer {
                 // Predictive Back Effect
                 val progress = backProgress
@@ -204,7 +209,7 @@ fun PlaylistDetailScreen(
                     clip = false
                 }
             },
-        color = Color.Transparent
+        color = Color.White
     ) {
         // Glass Lens Wrapper for content distortion
         Box(
@@ -251,15 +256,7 @@ fun PlaylistDetailScreen(
                                     .fillMaxWidth()
                                     .aspectRatio(1f)
                                     .then(
-                                        with(sharedTransitionScope) {
-                                            Modifier.sharedBounds(
-                                                rememberSharedContentState(key = "cover_${playlist.id}"),
-                                                animatedVisibilityScope = animatedVisibilityScope,
-                                                boundsTransform = { _, _ -> spring(dampingRatio = 0.8f, stiffness = 380f) },
-                                                resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds, // [FIX] Force resize to Target constraints (Full Width)
-                                                renderInOverlayDuringTransition = true
-                                            )
-                                        }
+                                        Modifier
                                     )
                             ) {
                                 // Background Blur Image
@@ -267,7 +264,7 @@ fun PlaylistDetailScreen(
                                     model = ImageRequest.Builder(LocalContext.current)
                                         .data(playlist.songs.firstOrNull()?.albumArtUri)
                                         .crossfade(false)
-                                        .memoryCacheKey("cover_${playlist.id}")
+                                        .memoryCacheKey("cover_${playlist.id}_${playlist.songs.firstOrNull()?.id ?: ""}")
                                         .build(),
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,

@@ -1,5 +1,7 @@
 package com.vagueplayer.music.data.model
 
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 import android.net.Uri
 import java.util.UUID
 
@@ -13,6 +15,7 @@ import java.util.UUID
 // 1. 歌曲 (Song)
 // =============================================================================
 
+@Parcelize
 data class Song(
     val id: Long,
     val title: String,
@@ -24,41 +27,44 @@ data class Song(
     val dateAdded: Long,
     val size: Long,
     val path: String = "" // [NEW] For Import/Export matching
-)
+) : Parcelable
 
 // =============================================================================
 // 2. 专辑 (Album)
 // =============================================================================
 
+@Parcelize
 data class Album(
     val id: Long,
     val title: String,
     val artist: String,
     val albumArtUri: Uri?,
     val numberOfSongs: Int
-)
+) : Parcelable
 
 // =============================================================================
 // 3. 歌手 (Artist)
 // =============================================================================
 
+@Parcelize
 data class Artist(
     val id: Long,
     val name: String,
     val numberOfAlbums: Int,
     val numberOfTracks: Int
-)
+) : Parcelable
 
 // =============================================================================
 // 4. 歌单 (Playlist)
 // =============================================================================
 
+@Parcelize
 data class Playlist(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val songs: MutableList<Song> = mutableListOf(),
     val dateCreated: Long = System.currentTimeMillis()
-)
+) : Parcelable
 
 // =============================================================================
 // 5. 音乐文件夹 (Music Folder)

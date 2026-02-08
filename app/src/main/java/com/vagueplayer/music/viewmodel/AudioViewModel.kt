@@ -97,6 +97,7 @@ class AudioViewModel(
 
     // [NEW] Daily Recommendation Cover Rotation
     private val _dailyCoverIndex = MutableStateFlow(0)
+    val dailyCoverIndex: StateFlow<Int> = _dailyCoverIndex.asStateFlow() // [Exposed]
 
     init {
         // Start Rotation Timer

@@ -59,7 +59,8 @@ class RecommendationEngine {
         currentDevice: String = "UNKNOWN" 
     ): RecommendationResult {
         // [Verified] Min Songs Requirement
-        if (allSongs.size < 20) {
+        // [Verified] Min Songs Requirement
+        if (allSongs.size < 5) {
             return RecommendationResult(emptyList(), emptyMap())
         }
 
@@ -81,17 +82,40 @@ class RecommendationEngine {
             .coerceIn(MIN_RECOMMENDATION_COUNT, MAX_RECOMMENDATION_COUNT)
             .coerceAtMost(allSongs.size)
             
-        // 2. Filter Cooldown + Scoring Preparation
+        // 2. Dynamic Filtering (Strict vs Relaxed)
+        // We first try to find enough songs that satisfy the Strict Cooldown.
+        // If not enough (< 20), we relax the rules to include ANY available song and disable artist limits.
+        
         data class ScoredSong(val song: Song, val score: Float, val debugReason: String)
         
-        val candidates = allSongs.mapNotNull { song ->
+        val strictCandidatesRaw = mutableListOf<Song>()
+        val cooldownCandidatesRaw = mutableListOf<Song>()
+        
+        allSongs.forEach { song ->
             val stats = statsMap[song.id] ?: SongStatistics(song.id)
-            
-            // Cooldown Filter
             val timeSinceRecommended = now - stats.lastRecommendedAt
+            
+            // Check Cooldown
             if (stats.lastRecommendedAt != 0L && timeSinceRecommended < RECOMMENDATION_COOLDOWN_MS) {
-                return@mapNotNull null
+                cooldownCandidatesRaw.add(song)
+            } else {
+                strictCandidatesRaw.add(song)
             }
+        }
+        
+        // Determine Mode
+        val useRelaxedRules = strictCandidatesRaw.size < MIN_RECOMMENDATION_COUNT
+        
+        // Final Candidate Pool
+        val finalRawCandidates = if (useRelaxedRules) {
+            strictCandidatesRaw + cooldownCandidatesRaw // Use everything if strict is not enough
+        } else {
+            strictCandidatesRaw
+        }
+        
+        // Score Candidates
+        val candidates = finalRawCandidates.mapNotNull { song ->
+            val stats = statsMap[song.id] ?: SongStatistics(song.id)
             
             // Scoring Logic
             var score = 1.0f
@@ -141,7 +165,17 @@ class RecommendationEngine {
             // F. Play Count (Base Popularity)
             if (stats.playCount > 10) score += 1.0f
             
-            ScoredSong(song, score, reasons.joinToString(","))
+            // [NEW] G. Strict Priority Boost
+            // If we are in "Relaxed Result" mode (mixed pool), we must prioritize STRICT candidates first.
+            if (stats.lastRecommendedAt == 0L || (now - stats.lastRecommendedAt) >= RECOMMENDATION_COOLDOWN_MS) {
+                score += 50.0f // Huge boost ensures they are picked before any "Relaxed" (Cooldown-Violating) songs
+            }
+            
+            // [FIX] Pre-compute random jitter for stable sorting
+            val jitter = Math.random().toFloat() * 1.5f
+            val finalScore = score + jitter
+            
+            ScoredSong(song, finalScore, reasons.joinToString(","))
         }
 
         if (candidates.isEmpty()) return RecommendationResult(emptyList(), emptyMap())
@@ -197,8 +231,8 @@ class RecommendationEngine {
             
             // Sort by Score Descending -> Then Shuffle top chunk to keep variety?
             // Or Weighted Random selection? 
-            // Let's use Deterministic Sort by Score + Random Noise for variety
-            val sortedItems = poolItems.sortedByDescending { it.score + Math.random().toFloat() * 1.5f } // Add jitter
+            // Let's use Deterministic Sort by Score (Score already includes random jitter now)
+            val sortedItems = poolItems.sortedByDescending { it.score } 
             
             var addedCount = 0
             
@@ -208,7 +242,7 @@ class RecommendationEngine {
                 
                 // Diversity Checks
                 val currentArtistCount = artistCounts.getOrDefault(song.artist, 0)
-                if (currentArtistCount >= MAX_SONGS_PER_ARTIST) continue
+                if (!useRelaxedRules && currentArtistCount >= MAX_SONGS_PER_ARTIST) continue // Relax Limit check if Relaxed Mode is Active
 
                 val contentKey = "${song.title.trim()}|${song.artist.trim()}"
                 if (selectedContentKeys.contains(contentKey)) continue

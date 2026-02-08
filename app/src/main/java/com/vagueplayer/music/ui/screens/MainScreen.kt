@@ -6,6 +6,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.animateContentSize
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
@@ -204,7 +209,13 @@ fun MainScreen() {
     val dailyRecommendations by audioViewModel.dailyRecommendations.collectAsState()
 
     // Top-Level State
-    var currentPage by remember { mutableIntStateOf(0) }
+    var currentPage by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    
+    // [DEBUG] Log Restoration
+    LaunchedEffect(Unit) {
+        android.util.Log.d("NavDebug", "MainScreen Recomposed. Restored currentPage: $currentPage")
+    }
+    
     var playerBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var navBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var searchBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
@@ -213,7 +224,7 @@ fun MainScreen() {
     // State
     var showPlayer by remember { mutableStateOf(false) }
     var showPlaylistGlobal by remember { mutableStateOf(false) }
-    var selectedPlaylist by remember { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
+    var selectedPlaylist by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<com.vagueplayer.music.data.model.Playlist?>(null) }
     
     // [FIX] Delayed reset logic for overlayBounds to ensure smooth finish of glass transitions
     var targetOverlayBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
@@ -286,6 +297,35 @@ fun MainScreen() {
     // 0f = Expanded (Normal), 1f = Collapsed (Circle/Shrunk)
     // Controlled by Swipe Threshold
     var isDockCollapsed by remember { mutableStateOf(false) } 
+    
+    // [FIX] Helper to check if any glass dialog is active
+    // Consolidating all overlay states + global playlist delete state
+    val playlistToDelete by audioViewModel.playlistToDelete.collectAsState()
+    val isAnyOverlayVisible = showSettings || showPlaylistMenu || showRepeatMenu || showSortMenu || 
+                              showPlaylistGlobal || showDeleteConfirm || showCreatePlaylistDialog || 
+                              showAddToPlaylist || showFavoritesOverlay || showRecentOverlay || 
+                              showRemovedOverlay || showLoopCountDialog || showDailyRecommend ||
+                              (selectedPlaylist != null) || (playlistToDelete != null) // Include playlist detail
+
+    // -------------------------------------------------------------------------
+    // Back Handlers (LIFO - Last Defined = First Handled)
+    // Global Navigation Handlers are defined EARLY to have LOWEST priority.
+    // -------------------------------------------------------------------------
+    
+    // 1. Base Navigation (Go to Home)
+    BackHandler(enabled = currentPage != 0 && !showPlayer && !isSearchActive && !isAnyOverlayVisible) { 
+        currentPage = 0 
+    }
+
+    // 2. Search Mode
+    BackHandler(enabled = isSearchActive && !isAnyOverlayVisible) { isSearchActive = false }
+
+    // 3. Immersive Player 
+    BackHandler(enabled = showPlayer && !isAnyOverlayVisible) {  
+        showPlayer = false 
+        overlayBounds = null
+    }
+
     // Accumulator for scroll delta to detect swipe intent
     var scrollAccumulator by remember { mutableFloatStateOf(0f) }
     val swipeThreshold = 5.dp
@@ -357,14 +397,6 @@ fun MainScreen() {
     }
 
 
-    // [FIX] Helper to check if any glass dialog is active
-    // Consolidating all overlay states + global playlist delete state
-    val playlistToDelete by audioViewModel.playlistToDelete.collectAsState()
-    val isAnyOverlayVisible = showSettings || showPlaylistMenu || showRepeatMenu || showSortMenu || 
-                              showPlaylistGlobal || showDeleteConfirm || showCreatePlaylistDialog || 
-                              showAddToPlaylist || showFavoritesOverlay || showRecentOverlay || 
-                              showRemovedOverlay || showLoopCountDialog || showDailyRecommend ||
-                              (playlistToDelete != null) // Include global delete dialog
 
     // [FIX] Ensure Search Text is updated
     
@@ -395,77 +427,52 @@ fun MainScreen() {
                 .fillMaxSize()
                 .nestedScroll(nestedScrollConnection) 
         ) {
-        
-         // Animate distortion strength: Fade out when Player is open to prevent full-screen glitch
-         // Animate distortion strength: Fade out when Player is open to prevent full-screen glitch
-        // [FIX] Keep distortion active if an Overlay (Dialog) is visible (reporting bounds), even if Player is open.
-        val targetDistortion = if (showPlayer && overlayBounds == null) 0f else 45f
-        val animatedDistortion by animateFloatAsState(
-            targetValue = targetDistortion,
-            animationSpec = tween(300), 
-            label = "glassDistortion"
-        )
+            // Animate distortion strength
+            val targetDistortion = if (showPlayer && overlayBounds == null) 0f else 45f
+            val animatedDistortion by animateFloatAsState(
+                targetValue = targetDistortion,
+                animationSpec = tween(300), 
+                label = "glassDistortion"
+            )
 
-        // WRAPPER BOX (ROOT CONTAINER) - NO LENS HERE
-        Box(
-             modifier = Modifier
-                .fillMaxSize()
-        ) {
-        
-        // -------------------------------------------------------------------------
-        // SOURCE LAYER: Content to be blurred (LENS APPLIED HERE)
-        // -------------------------------------------------------------------------
-        // [FIX] Coordinate Normalization
-        // We need to shift global bounds (boundsInRoot) to local bounds for the shader.
-        var rootOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { rootOffset = it.boundsInRoot().topLeft }
-                .liquidGlassLens(
-                    // [FIX] Translate global bounds to local bounds using rootOffset
-                    bounds1 = (if (showPlayer) null else playerBounds)?.translate(-rootOffset.x, -rootOffset.y),
-                    bounds2 = (if (showPlayer) null else navBounds)?.translate(-rootOffset.x, -rootOffset.y),
-                    bounds3 = (if (showPlayer) null else searchBounds)?.translate(-rootOffset.x, -rootOffset.y),
-                    // [FIX] RE-COUPLE Dialog to Global Lens.
-                    // Now that coordinates are fixed, we MUST use Global Lens to distort the background.
-                    bounds4 = overlayBounds?.translate(-rootOffset.x, -rootOffset.y),
-                    
-                    // [FIX] Dynamic Corner Radius
-                    // User Request: Dock = 32dp. Dialog = 32dp. 
-                    // Unified radius for all glass elements.
-                    cornerRadius = 32.dp,
-
-                    distortionStrength = animatedDistortion, 
-                    // [FIX] Increase edge width for Dialogs to ensure full-body distortion.
-                    // Dock (small) = 60f. Dialog (large) = 300f.
-                    // [User Revert] Edge width back to 60f.
-                    // This creates a sharper, more defined glass edge rather than a wide diffuse one.
-                    edgeWidth = 60f,
-                    fusionStrength = 35f,
-                    aberrationStrength = 0.3f,
-                    // [FIX] Restore 0.8f Tint (White Base)
-                    // This determines the base "Milky" color of the distortion zone (Dock, Nav, Dialog).
-                    tint = Color.White.copy(alpha = 0.80f),
-                    enableShader = true
-                )
-        ) {
-            // Inner Box for Haze Source Capture (Raw Content)
+            // WRAPPER BOX (ROOT CONTAINER)
             Box(
-                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background) // [FIX] Ensure opaque background for predictive back
-                    // .haze(state = mainHazeState) // REMOVED: Pushed down to children to avoid Sink-in-Source crash
+                 modifier = Modifier.fillMaxSize()
             ) {
-            // Background (Pure White)\n            Box(modifier = Modifier.fillMaxSize().background(Color.White))
+                // Coordinate Normalization
+                var rootOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
 
-            // Wrapper for Search/Pager content
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // REMOVED padding(bottom = 100.dp) to allow content to scroll BEHIND the dock
-            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { rootOffset = it.boundsInRoot().topLeft }
+                        .liquidGlassLens(
+                            bounds1 = (if (showPlayer) null else playerBounds)?.translate(-rootOffset.x, -rootOffset.y),
+                            bounds2 = (if (showPlayer) null else navBounds)?.translate(-rootOffset.x, -rootOffset.y),
+                            bounds3 = (if (showPlayer) null else searchBounds)?.translate(-rootOffset.x, -rootOffset.y),
+                            bounds4 = overlayBounds?.translate(-rootOffset.x, -rootOffset.y),
+                            cornerRadius = 32.dp,
+                            distortionStrength = animatedDistortion, 
+                            edgeWidth = 60f,
+                            fusionStrength = 35f,
+                            aberrationStrength = 0.3f,
+                            tint = Color.White.copy(alpha = 0.80f),
+                            enableShader = true
+                        )
+                ) {
+                    // Inner Box for Haze Source Capture
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        // Background (Pure White)
+                        Box(modifier = Modifier.fillMaxSize().background(Color.White))
+
+                        // Wrapper for Search/Pager content
+                        Box(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
                 // Search Mode UI
                 if (isSearchActive) {
                     val uiState by audioViewModel.searchUiState.collectAsState()
@@ -901,9 +908,6 @@ fun MainScreen() {
                     customTitle = "已移除歌曲"
                 )
             }
-        }
-
-
 
         // Playlist Detail Container Transform
         // BackHandler moved to PlaylistDetailScreen for better predictive back support
@@ -927,57 +931,7 @@ fun MainScreen() {
             else ""
         }
 
-        // [FIX] Direct Playlist Transition (Hardcoded for Stability)
-        // Replaces generic ExpandableContainer to guarantee "Card -> Full Screen" physics.
-        AnimatedVisibility(
-            visible = currentPlaylist != null,
-            // [FIX] Disable Container Shared Transition as requested (Standard Fade/Slide)
-            enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(initialOffsetY = { it / 10 }), 
-            exit = fadeOut(tween(durationMillis = 300)) + slideOutVertically(targetOffsetY = { it / 10 }),
-            modifier = Modifier.zIndex(200f) // Always on top
-        ) {
-             // The Shared Element Container
-             Box(
-                 modifier = Modifier
-                     .fillMaxSize() // Wrapper fills screen to host the overlay
-             ) {
-                 // The Surface that Morphs
-                 // CRITICAL: sharedBounds -> fillMaxSize -> background
-                 Box(
-                     modifier = Modifier
-                         .then(
-                            Modifier
-                        )
-                         .fillMaxSize() // Fill the ANIMATED bounds (Card -> Screen)
-                         .clip(RoundedCornerShape(0.dp)) // No corners on Target
-                         .background(MaterialTheme.colorScheme.background) 
-                 ) {
-                      if (activePlaylistContent != null) {
-                           // Log lifecycle
-                            androidx.compose.runtime.SideEffect {
-                                 android.util.Log.d("MainScreen", "Direct Transition: Key=$sharedKey, Playlist=${activePlaylistContent?.name}")
-                            }
-                           
-                           PlaylistDetailScreen(
-                               playlist = activePlaylistContent!!,
-                               viewModel = audioViewModel,
-                               onDismissRequest = { selectedPlaylist = null },
-                               animatedVisibilityScope = this@AnimatedVisibility, 
-                               sharedTransitionScope = this@SharedTransitionLayout,
-                               hazeState = mainHazeState,
-                               playerBounds = playerBounds ?: androidx.compose.ui.geometry.Rect.Zero,
-                               isBackEnabled = !showPlayer,
-                               onSongMenuRequest = { song, offset, size ->
-                                   activeSongForMenu = song
-                                   songMenuAnchor = offset
-                                   size?.let { songMenuSize = it } ?: run { songMenuSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp) }
-                                   showSongMenu = true
-                               }
-                           )
-                      }
-                 }
-             }
-        }
+        // [Deleted Duplicate AnimatedVisibility Block]
 
 
 
@@ -1347,33 +1301,51 @@ fun MainScreen() {
             onLayoutCoordinates = { overlayBounds = it.boundsInRoot() }
         )
 
-        // 4. Settings Screen (Full Screen Overlay)
-        // 4. Settings Screen (Full Screen Overlay)
+        // 4. Shared Element Detail Screen (Overlay)
+        // [FIX] State Holder Pattern for robust Exit Animation
+        // We reuse the 'activePlaylistContent' declared above (Line ~950) to ensure exit animation has data.
+        
+        if (selectedPlaylist != null) {
+            activePlaylistContent = selectedPlaylist
+        }
+        
         AnimatedVisibility(
-            visible = showSettings,
+            visible = selectedPlaylist != null,
             enter = fadeIn(animationSpec = tween(300)),
             exit = fadeOut(animationSpec = tween(300)),
-            modifier = Modifier
-                .zIndex(500f) // Above everything
-                .fillMaxSize()
+            modifier = Modifier.zIndex(500f) // High Z-Index
         ) {
-            SettingsScreen(
-                onBack = { showSettings = false },
-                viewModel = audioViewModel
-            )
+             val currentContent = activePlaylistContent
+             if (currentContent != null) {
+                 PlaylistDetailScreen(
+                    playlist = currentContent,
+                    viewModel = audioViewModel,
+                    onDismissRequest = { 
+                        selectedPlaylist = null
+                        activeSongForMenu = null 
+                    },
+                    animatedVisibilityScope = this,
+                    sharedTransitionScope = this@SharedTransitionLayout,
+                    hazeState = mainHazeState,
+                    playerBounds = playerBounds ?: androidx.compose.ui.geometry.Rect.Zero,
+                    onSongMenuRequest = { song, offset, size ->
+                        activeSongForMenu = song
+                        songMenuAnchor = offset
+                        size?.let { songMenuSize = it } ?: run { songMenuSize = androidx.compose.ui.unit.DpSize(48.dp, 48.dp) }
+                        showSongMenu = true
+                    }
+                 )
+             }
         }
-
-
-
-
-
-
-
-
-        // -------------------------------------------------------------------------
-        // SINK LAYER: Unified Glass Dock (Topmost Layer)
-        // -------------------------------------------------------------------------
         
+
+
+
+
+
+
+
+
         // -------------------------------------------------------------------------
         // SINK LAYER: Unified Glass Dock (Topmost Layer)
         // -------------------------------------------------------------------------
@@ -1529,22 +1501,6 @@ fun MainScreen() {
              }
         }
 
-    // Back Handlers (LIFO - Last Defined = First Handled)
-    
-    // 1. Base Navigation (Go to Home) - Lowest Priority
-    BackHandler(enabled = currentPage != 0 && !showPlayer && !isSearchActive && !isAnyOverlayVisible) { 
-        currentPage = 0 
-    }
-
-    // 2. Search Mode
-    BackHandler(enabled = isSearchActive && !isAnyOverlayVisible) { isSearchActive = false }
-
-    // 3. Immersive Player 
-    // Disable this handler if ANY internal overlays (like Repeat Menu) are open
-    BackHandler(enabled = showPlayer && !isAnyOverlayVisible) {  
-        showPlayer = false 
-        overlayBounds = null
-    }
 
     // 4. Full Screen Overlay Screens
     androidx.compose.animation.AnimatedContent(
@@ -1607,10 +1563,6 @@ fun MainScreen() {
     }
     
     // Playlist Global Overlay (Highest Priority for Overlay Stack)
-    // Moved here to ensure it closes BEFORE PlayerScreen if both are open.
-// Playlist Global Overlay (Highest Priority for Overlay Stack)
-    // Directly render; component handles internal AnimatedVisibility
-    // Playlist Global Overlay (Highest Priority for Overlay Stack)
     // Directly render; component handles internal AnimatedVisibility
     BackHandler(enabled = showPlaylistGlobal) { showPlaylistGlobal = false }
 
@@ -1651,8 +1603,7 @@ fun MainScreen() {
         )
     }
 
-    } // End Root Box (contains both Haze Box and Dialog Layer as siblings)
+    } // End Wrapper Box
+    } // End Root Box (NestedScroll)
     } // End SharedTransitionLayout
-
-
 } // End MainScreen
